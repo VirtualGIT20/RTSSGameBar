@@ -1,0 +1,18 @@
+.vs/
+.idea/
+**/bin/
+**/obj/
+**/AppPackages/
+**/BundleArtifacts/
+**/Generated Files/
+**/*.user
+**/*.suo
+**/*.pfx
+src/RTSSGameBar.Widget/Helper/*.exe
+src/RTSSGameBar.Widget/Helper/*.dll
+src/RTSSGameBar.Widget/Helper/*.config
+
+artifacts/
+**/*.p12
+**/*.key
+**/*.pvk
