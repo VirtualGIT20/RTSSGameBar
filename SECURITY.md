@@ -12,4 +12,4 @@ For normal bugs that do not expose sensitive information, use the repository iss
 
 ## Signing key policy
 
-The public `RTSSGameBar-Signing.cer` may be distributed with sideload releases. The matching PFX/private key and its password must never be committed, attached to an issue, or included in a release archive.
+The public `RTSSGameBar-Signing.cer` may be distributed with sideload releases. 
