@@ -117,7 +117,7 @@
     <MSBuild Projects="..\RTSSGameBar.Helper\RTSSGameBar.Helper.csproj"
              Targets="Build"
              Properties="Configuration=$(Configuration);Platform=x64" />
-    <MSBuild Projects="..\RTSSGameBar.Setup\RTSSGameBar.Setup.csproj"
+    <MSBuild Projects="..\RTSSGameBar.Setup\RTSSGameBar.Setup.vcxproj"
              Targets="Build"
              Properties="Configuration=$(Configuration);Platform=x64" />
     <MSBuild Projects="..\RTSSGameBar.RTSSPlugin\RTSSGameBar.RTSSPlugin.vcxproj"

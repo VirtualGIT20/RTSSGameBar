@@ -37,7 +37,7 @@ The normal state request also reads the native RTSS position and resolves it bac
 
 ## Setup
 
-`RTSSGameBar.Setup` is an x64 executable with `requireAdministrator`. It runs only for explicit Integration Install/Update/Remove actions and copies or removes `RTSSGameBarPlugin.dll` in the RTSS installation directory. RTSS restart is delegated back to the normal helper.
+`RTSSGameBar.Setup` is a native x64 Win32 executable with `requireAdministrator`. It runs only for explicit Integration Install/Update/Remove actions and copies or removes `RTSSGameBarPlugin.dll` in the RTSS installation directory. The native implementation intentionally keeps the existing Helper/Setup command-line and exit-code contract while avoiding a .NET Framework/CLR bootstrap dependency in the elevated packaged process. RTSS restart is delegated back to the normal helper.
 
 ## Focus/input principles
 

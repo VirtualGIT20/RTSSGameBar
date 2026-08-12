@@ -12,8 +12,9 @@
 8. Test all frame-limit presets and arbitrary slider values.
 9. Test all eight OSD positions and change position directly in RTSS; while the widget is visible it should reconcile on the next normal refresh.
 10. Hide the widget and confirm there is no periodic RTSS state polling; show it again and confirm immediate reconciliation.
-11. Test RTSS start/close and integration Install/Update/Remove.
-12. Before package uninstall, test Integration -> Remove and confirm the RTSS plugin file is removed.
+11. Test RTSS start/close and integration Install/Update/Remove. For each integration action, confirm `%LOCALAPPDATA%\RTSSGameBar\setup.log` reaches `Setup started`, completes the requested file operation, and exits with code 0.
+12. On Windows 11 25H2 build 26200.9168 or newer, repeat at least one Integration Update plus Remove/Install cycle and confirm the native `RTSSGameBar.Setup.exe` returns promptly with no lingering setup process. This specifically guards the packaged/elevated .NET Framework bootstrap regression reproduced on 26200.8973 and 26200.9168.
+13. Before package uninstall, test Integration -> Remove and confirm the RTSS plugin file is removed.
 
 ## Static validation
 

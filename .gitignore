@@ -16,3 +16,4 @@ artifacts/
 **/*.p12
 **/*.key
 **/*.pvk
+**/*.aps
