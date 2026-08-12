@@ -2,7 +2,7 @@
 
 All notable public changes to RTSS Game Bar are documented here.
 
-## Unreleased
+## 1.0.1 - 2026-08-12
 
 ### Fixed
 

@@ -11,7 +11,7 @@ if ([string]::IsNullOrWhiteSpace($CerPath)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
-    $OutputDirectory = Join-Path $PSScriptRoot '..\artifacts\GitHubRelease\v1.0.0'
+    $OutputDirectory = Join-Path $PSScriptRoot '..\artifacts\GitHubRelease\v1.0.1'
 }
 
 $PackagePath = [IO.Path]::GetFullPath($PackagePath)
@@ -39,7 +39,7 @@ Copy-Item -LiteralPath $PackagePath -Destination $packageTarget -Force
 Copy-Item -LiteralPath $CerPath -Destination $cerTarget -Force
 
 $installText = @'
-RTSS Game Bar v1.0.0 - GitHub sideload
+RTSS Game Bar v1.0.1 - GitHub sideload
 
 Requirements:
 - Windows 10 build 19041 or newer

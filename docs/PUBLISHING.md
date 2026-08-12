@@ -15,11 +15,11 @@ gh repo create RTSSGameBar --public --source=. --remote=origin --push
 
 If the repository already exists on GitHub, add it as `origin` instead of using `gh repo create`.
 
-## Create the v1.0.0 tag
+## Create the v1.0.1 tag
 
 ```powershell
-git tag -a v1.0.0 -m "RTSS Game Bar v1.0.0"
-git push origin v1.0.0
+git tag -a v1.0.1 -m "RTSS Game Bar v1.0.1"
+git push origin v1.0.1
 ```
 
 ## Build the release package
@@ -43,9 +43,9 @@ The public release directory must contain the signed package, public CER, instal
 After the tag and public release directory are ready:
 
 ```powershell
-gh release create v1.0.0 `
-  artifacts\GitHubRelease\v1.0.0\* `
-  --title "RTSS Game Bar v1.0.0" `
+gh release create v1.0.1 `
+  artifacts\GitHubRelease\v1.0.1\* `
+  --title "RTSS Game Bar v1.0.1" `
   --notes-file RELEASE_NOTES.md `
   --verify-tag
 ```
