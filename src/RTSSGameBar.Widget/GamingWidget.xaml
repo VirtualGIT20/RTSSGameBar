@@ -55,7 +55,7 @@
                         <Image Source="Assets/Square44x44Logo.png" Width="34" Height="34" VerticalAlignment="Center" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                             <TextBlock Text="RTSS Game Bar" FontSize="24" FontWeight="SemiBold" />
-                            <TextBlock Text="v1.0.0" Opacity="0.66" FontSize="13" />
+                            <TextBlock Text="v1.0.1" Opacity="0.66" FontSize="13" />
                         </StackPanel>
                     </Grid>
 

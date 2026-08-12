@@ -64,7 +64,7 @@ manifest = (ROOT / 'src/RTSSGameBar.Widget/Package.appxmanifest').read_text(enco
 for needle in [
     'Name="VirtualGIT20.RTSSGameBar"',
     'Publisher="CN=VirtualGIT20"',
-    'Version="1.0.0.0"',
+    'Version="1.0.1.0"',
     '<PublisherDisplayName>VirtualGIT20</PublisherDisplayName>',
     'DisplayName="RTSS Game Bar"',
     'Name="microsoft.gameBarUIExtension"',
@@ -87,8 +87,8 @@ assembly_info = (ROOT / 'src/RTSSGameBar.Widget/Properties/AssemblyInfo.cs').rea
 for needle in [
     'AssemblyCompany("VirtualGIT20")',
     'AssemblyProduct("RTSS Game Bar")',
-    'AssemblyVersion("1.0.0.0")',
-    'AssemblyFileVersion("1.0.0.0")',
+    'AssemblyVersion("1.0.1.0")',
+    'AssemblyFileVersion("1.0.1.0")',
 ]:
     if needle not in assembly_info:
         errors.append('widget assembly metadata missing: ' + needle)
@@ -98,8 +98,8 @@ for rel in [
     'src/RTSSGameBar.Helper/RTSSGameBar.Helper.csproj',
 ]:
     text = (ROOT / rel).read_text(encoding='utf-8')
-    for needle in ['<Version>1.0.0</Version>', '<AssemblyVersion>1.0.0.0</AssemblyVersion>',
-                   '<FileVersion>1.0.0.0</FileVersion>', '<Company>VirtualGIT20</Company>',
+    for needle in ['<Version>1.0.1</Version>', '<AssemblyVersion>1.0.1.0</AssemblyVersion>',
+                   '<FileVersion>1.0.1.0</FileVersion>', '<Company>VirtualGIT20</Company>',
                    '<Product>RTSS Game Bar</Product>']:
         if needle not in text:
             errors.append(f'public assembly metadata missing in {rel}: {needle}')
@@ -157,7 +157,7 @@ for needle in ['Debug|x64', 'Release|x64', 'MachineX64', '<PlatformToolset>v145<
     if needle not in setup_project:
         errors.append('native setup project config missing: ' + needle)
 setup_resource = (ROOT / 'src/RTSSGameBar.Setup/RTSSGameBar.Setup.rc').read_text(encoding='utf-8')
-for needle in ['FILEVERSION 1,0,0,0', 'PRODUCTVERSION 1,0,0,0', 'VirtualGIT20', 'RTSS Game Bar Integration Setup']:
+for needle in ['FILEVERSION 1,0,1,0', 'PRODUCTVERSION 1,0,1,0', 'VirtualGIT20', 'RTSS Game Bar Integration Setup']:
     if needle not in setup_resource:
         errors.append('native setup version resource missing: ' + needle)
 setup_manifest = (ROOT / 'src/RTSSGameBar.Setup/app.manifest').read_text(encoding='utf-8')
@@ -189,7 +189,7 @@ for needle in [
     'Text="RTSS Game Bar"', 'FrameLimitSlider', 'FrameLimitPresetComboBox', 'LimiterTypeComboBox',
     'LimiterEnabledToggle', 'OverlayToggle', 'OsdZoomSlider', 'OsdPositionComboBox',
     'RtssActionButton', 'IntegrationActionButton', 'RefreshButton',
-    '<Slider ', '<ComboBox ', '<ToggleSwitch ', 'Symbol="Sync"', 'Text="v1.0.0"'
+    '<Slider ', '<ComboBox ', '<ToggleSwitch ', 'Symbol="Sync"', 'Text="v1.0.1"'
 ]:
     if needle not in widget_xaml:
         errors.append('controller UI missing: ' + needle)
@@ -397,4 +397,4 @@ if errors:
 
 print('Static checks passed.')
 print(f'Checked {len(xml_files)} XML project/manifest/XAML files.')
-print('RTSS Game Bar v1.0.0: public identity VirtualGIT20.RTSSGameBar; Widget/Helper protocol v19; RTSS plugin v1.0.0 on protocol v6.')
+print('RTSS Game Bar v1.0.1: public identity VirtualGIT20.RTSSGameBar; Widget/Helper protocol v19; RTSS plugin v1.0.0 on protocol v6.')

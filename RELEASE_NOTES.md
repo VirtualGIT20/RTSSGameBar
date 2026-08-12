@@ -1,16 +1,15 @@
-# RTSS Game Bar v1.0.0
+# RTSS Game Bar v1.0.1
 
-First public release of RTSS Game Bar.
+Maintenance release focused on Windows 11 25H2 integration compatibility.
 
 Highlights:
 
-- Controller-first RTSS Global controls inside Xbox Game Bar.
-- Frame limiter slider plus common presets from Unlimited through 360 FPS.
-- Limiter type/state, OSD visibility, OSD size, and eight native OSD positions.
-- OSD position read-back when changed directly in RTSS.
-- RTSS start/close and integration Install/Update/Remove actions.
-- Lightweight status reconciliation only while the widget is visible.
-- Public package identity `VirtualGIT20.RTSSGameBar` and publisher `CN=VirtualGIT20`.
+- Replaced the elevated .NET Framework integration setup executable with a native x64 Win32 implementation.
+- Preserved the existing Integration `Install` / `Update` / `Remove` command-line and exit-code contract.
+- Avoids the packaged/elevated CLR bootstrap hang reproduced on Windows 11 25H2 builds 26200.8973 and 26200.9168.
+- Integration Update, Remove, and Install were validated on build 26200.9168 with no lingering setup process.
+- Widget/Helper IPC remains protocol v19.
+- RTSS plugin IPC remains protocol v6 and the bundled plugin remains v1.0.0.
 
 RTSS is required and is not bundled. RTSS Game Bar is an independent third-party project.
 

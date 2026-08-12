@@ -1,9 +1,9 @@
 # Testing
 
-## Public v1.0.0 smoke test
+## Public v1.0.1 smoke test
 
 1. Remove any old `VirtualGIT20.RTSSGameBar.POC` package so only the public widget is present.
-2. Build/sign/install package `1.0.0.0` with a certificate whose Subject is `CN=VirtualGIT20`.
+2. Build/sign/install package `1.0.1.0` with a certificate whose Subject is `CN=VirtualGIT20`.
 3. Open Xbox Game Bar and confirm the widget appears as `RTSS Game Bar`.
 4. If the previously installed RTSS plugin is an older development build, confirm Integration shows `Update`, perform the update, and confirm the plugin reports v1.0.0 afterward.
 5. Verify controller navigation through Frame limiter, Preset, Limiter type, Limiter, Overlay, OSD size, OSD position, RTSS, Integration, and Refresh.

@@ -80,14 +80,14 @@ powershell -ExecutionPolicy Bypass -File scripts\prepare-github-release.ps1 `
   -PackagePath <path-to-signed-msix-or-appx>
 ```
 
-The script copies the signed package and public CER into `artifacts\GitHubRelease\v1.0.0`, creates `SHA256SUMS.txt`, and refuses to copy any PFX/private key.
+The script copies the signed package and public CER into `artifacts\GitHubRelease\v1.0.1`, creates `SHA256SUMS.txt`, and refuses to copy any PFX/private key.
 
 ## Public release contents
 
 A GitHub sideload release should contain only public material, for example:
 
 ```text
-RTSSGameBar.Widget_1.0.0.0_x64.msix
+RTSSGameBar.Widget_1.0.1.0_x64.msix
 RTSSGameBar-Signing.cer
 SHA256SUMS.txt
 ```

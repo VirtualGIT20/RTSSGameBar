@@ -34,7 +34,7 @@ For a self-signed release, import the supplied public certificate into `LocalMac
 
 ```powershell
 Import-Certificate -FilePath .\RTSSGameBar-Signing.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
-Add-AppxPackage .\RTSSGameBar.Widget_1.0.0.0_x64.msix
+Add-AppxPackage .\RTSSGameBar.Widget_1.0.1.0_x64.msix
 ```
 
 After installation, open Xbox Game Bar and launch **RTSS Game Bar** from the widget menu. If Integration reports `Install` or `Update`, run that action once so the bundled RTSS plugin matches the widget.
@@ -75,7 +75,7 @@ RTSS Game Bar has no telemetry, analytics, account system, or network service. R
 
 ## Development status
 
-`v1.0.0` is the first public baseline. The public package identity is `VirtualGIT20.RTSSGameBar`, publisher `CN=VirtualGIT20`, and package version `1.0.0.0`.
+`v1.0.0` is the first public baseline. The current release is `v1.0.1`, using package version `1.0.1.0` with public package identity `VirtualGIT20.RTSSGameBar` and publisher `CN=VirtualGIT20`.
 
 The public Widget/Helper IPC is protocol v19. The RTSS plugin IPC remains protocol v6. The bundled RTSS integration plugin is v1.0.0.
 
