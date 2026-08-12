@@ -21,8 +21,9 @@ required = [
     'src/RTSSGameBar.Helper/Rtss/RtssController.cs',
     'src/RTSSGameBar.Helper/RtssPlugin/RtssPluginClient.cs',
     'src/RTSSGameBar.Helper/Integration/IntegrationManager.cs',
-    'src/RTSSGameBar.Setup/RTSSGameBar.Setup.csproj',
-    'src/RTSSGameBar.Setup/Program.cs',
+    'src/RTSSGameBar.Setup/RTSSGameBar.Setup.vcxproj',
+    'src/RTSSGameBar.Setup/Setup.cpp',
+    'src/RTSSGameBar.Setup/RTSSGameBar.Setup.rc',
     'src/RTSSGameBar.Setup/app.manifest',
     'src/RTSSGameBar.Widget/Package.appxmanifest',
     'src/RTSSGameBar.Widget/GamingWidget.xaml',
@@ -95,7 +96,6 @@ for needle in [
 for rel in [
     'src/RTSSGameBar.Protocol/RTSSGameBar.Protocol.csproj',
     'src/RTSSGameBar.Helper/RTSSGameBar.Helper.csproj',
-    'src/RTSSGameBar.Setup/RTSSGameBar.Setup.csproj',
 ]:
     text = (ROOT / rel).read_text(encoding='utf-8')
     for needle in ['<Version>1.0.0</Version>', '<AssemblyVersion>1.0.0.0</AssemblyVersion>',
@@ -136,17 +136,30 @@ if 'Local\\RTSSGameBar.Helper.v19.Singleton' not in helper_src:
 if 'Helper.POC' in helper_src:
     errors.append('development POC helper mutex/name remains')
 
-setup = (ROOT / 'src/RTSSGameBar.Setup/Program.cs').read_text(encoding='utf-8')
+setup = (ROOT / 'src/RTSSGameBar.Setup/Setup.cpp').read_text(encoding='utf-8')
 for needle in [
-    'IsRtssRunning', 'File.Copy', 'File.Delete', 'RTSSGameBarPlugin.dll',
-    'EnsureRtssStoppedForMaintenance', 'process.Kill()', 'TerminateProcess',
+    'ExitSuccess = 0', 'ExitRtssStillRunning = 20', 'ExitRtssNotFound = 21',
+    'ExitBundledPluginMissing = 22', 'ExitFileOperationFailed = 23',
+    'L"install"', 'L"update"', 'L"remove"',
+    'IsRtssRunning', 'CopyFileW', 'DeleteFileW', 'RTSSGameBarPlugin.dll',
+    'EnsureRtssStoppedForMaintenance', 'TerminateProcess', 'RegOpenKeyExW',
+    'KEY_WOW64_32KEY', 'KEY_WOW64_64KEY', 'WM_CLOSE',
     'restart is delegated to the normal helper'
 ]:
     if needle not in setup:
-        errors.append('setup behavior missing: ' + needle)
-for forbidden in ['taskkill', 'Set-Acl', 'ScheduledTask', 'QueueDeferredRestart', 'RunDeferredRestart']:
+        errors.append('native setup behavior missing: ' + needle)
+for forbidden in ['taskkill', 'Set-Acl', 'ScheduledTask', 'QueueDeferredRestart', 'RunDeferredRestart', 'mscoree.dll', '_CorExeMain']:
     if forbidden in setup:
         errors.append('setup contains forbidden/removed behavior: ' + forbidden)
+setup_project = (ROOT / 'src/RTSSGameBar.Setup/RTSSGameBar.Setup.vcxproj').read_text(encoding='utf-8')
+for needle in ['Debug|x64', 'Release|x64', 'MachineX64', '<PlatformToolset>v145</PlatformToolset>',
+               '<RuntimeLibrary>MultiThreaded</RuntimeLibrary>', '<TargetName>RTSSGameBar.Setup</TargetName>']:
+    if needle not in setup_project:
+        errors.append('native setup project config missing: ' + needle)
+setup_resource = (ROOT / 'src/RTSSGameBar.Setup/RTSSGameBar.Setup.rc').read_text(encoding='utf-8')
+for needle in ['FILEVERSION 1,0,0,0', 'PRODUCTVERSION 1,0,0,0', 'VirtualGIT20', 'RTSS Game Bar Integration Setup']:
+    if needle not in setup_resource:
+        errors.append('native setup version resource missing: ' + needle)
 setup_manifest = (ROOT / 'src/RTSSGameBar.Setup/app.manifest').read_text(encoding='utf-8')
 for needle in ['requireAdministrator', 'supportedOS', 'RTSSGameBar.Setup']:
     if needle not in setup_manifest:
@@ -324,7 +337,7 @@ for needle in ['Debug|Win32', 'Release|Win32', 'MachineX86', '<PlatformToolset>v
 widget_project = (ROOT / 'src/RTSSGameBar.Widget/RTSSGameBar.Widget.csproj').read_text(encoding='utf-8')
 if '<PackageReference Include="Microsoft.Gaming.XboxGameBar"><Version>7.3.2506120</Version></PackageReference>' not in widget_project:
     errors.append('widget is not pinned to Xbox Game Bar SDK 7.3.2506120')
-for needle in ['BuildAndStageDesktopComponents', 'RTSSGameBar.Setup.csproj', 'RTSSGameBar.RTSSPlugin.vcxproj',
+for needle in ['BuildAndStageDesktopComponents', 'RTSSGameBar.Setup.vcxproj', 'RTSSGameBar.RTSSPlugin.vcxproj',
                'Integration\\RTSSGameBar.Setup.exe', 'Integration\\RTSSGameBarPlugin.dll']:
     if needle not in widget_project:
         errors.append('widget staging config missing: ' + needle)

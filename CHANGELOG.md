@@ -2,6 +2,12 @@
 
 All notable public changes to RTSS Game Bar are documented here.
 
+## Unreleased
+
+### Fixed
+
+- Replaced the elevated .NET Framework integration setup executable with a native x64 Win32 implementation while preserving the existing `install` / `update` / `remove` command-line and exit-code contract. This avoids a Windows 11 25H2 packaged/elevated CLR bootstrap regression reproduced on builds 26200.8973 and 26200.9168.
+
 ## 1.0.0 - 2026-08-10
 
 First public baseline.
