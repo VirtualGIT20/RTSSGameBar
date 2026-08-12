@@ -28,7 +28,7 @@ The project is designed around controller-first navigation and a lightweight run
 
 ## GitHub release installation
 
-GitHub sideload releases can be signed with the project's self-signed code-signing certificate. A release should contain the signed `.msix` or `.appx`, the public `.cer`, and checksums. The private `.pfx` is never distributed.
+GitHub sideload releases can be signed with the project's self-signed code-signing certificate.
 
 For a self-signed release, import the supplied public certificate into `LocalMachine\TrustedPeople` from an elevated PowerShell, then install the package:
 
@@ -43,7 +43,7 @@ If you want to remove RTSS Game Bar completely, use **Integration -> Remove** be
 
 ## Build from source
 
-Use Visual Studio 2022 / MSBuild with the UWP, C++, .NET Framework 4.8, and Windows SDK components required by the solution. The widget is intentionally pinned to `Microsoft.Gaming.XboxGameBar 7.3.2506120`.
+Use Visual Studio 2026 / MSBuild with the UWP, C++, .NET Framework 4.8, and Windows SDK components required by the solution. The widget is intentionally pinned to `Microsoft.Gaming.XboxGameBar 7.3.2506120`.
 
 From a Visual Studio Developer Command Prompt:
 
