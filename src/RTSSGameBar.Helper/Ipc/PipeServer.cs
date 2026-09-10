@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Text;
@@ -14,6 +15,15 @@ namespace RTSSGameBar.Helper.Ipc
     internal sealed class PipeServer
     {
         private readonly RtssController _rtss;
+        private static readonly object DiagnosticsLock = new object();
+        private static readonly string DiagnosticsDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "RTSSGameBar");
+        private static readonly string DiagnosticsFilePath = Path.Combine(DiagnosticsDirectory, "helper-ipc.log");
+        private static readonly string DiagnosticsPreviousFilePath = Path.Combine(DiagnosticsDirectory, "helper-ipc.previous.log");
+        private const long DiagnosticsRotateAfterBytes = 1L * 1024L * 1024L;
+        private long _nextSessionId;
+        private int _activeSessions;
 
         public PipeServer(RtssController rtss)
         {
@@ -22,27 +32,38 @@ namespace RTSSGameBar.Helper.Ipc
 
         public async Task RunAsync(CancellationToken cancellationToken)
         {
-            Log.Info("IPC server starting on pipe " + ProtocolConstants.PipeName + ". Protocol v" + ProtocolConstants.Version + "; plugin-only backend.");
+            Log.Info("IPC server starting on pipe " + ProtocolConstants.PipeName + ". Protocol v" + ProtocolConstants.Version + "; plugin-only backend; multi-client persistent sessions.");
 
             while (!cancellationToken.IsCancellationRequested)
             {
-                using (var pipe = CreatePipe())
+                NamedPipeServerStream pipe = null;
+                try
                 {
-                    try
-                    {
-                        await pipe.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
-                        Log.Info("IPC client connected (persistent session).");
-                        await HandleConnectionAsync(pipe, cancellationToken).ConfigureAwait(false);
-                        Log.Info("IPC client disconnected.");
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        return;
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Error("IPC connection failed: " + ex);
-                    }
+                    pipe = CreatePipe();
+                    await pipe.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+                    var sessionId = Interlocked.Increment(ref _nextSessionId);
+                    var activeSessions = Interlocked.Increment(ref _activeSessions);
+                    Log.Info("IPC client connected (persistent session). session=" + sessionId + " active=" + activeSessions + ".");
+                    LogIpc("CONNECTED session=" + sessionId + " active=" + activeSessions + ".");
+
+                    // Game Bar can create a replacement widget before an older widget process
+                    // releases its persistent pipe. Hand the accepted connection to its own
+                    // session and immediately create another listener for the replacement.
+                    _ = HandleAcceptedConnectionAsync(pipe, sessionId, cancellationToken);
+                    pipe = null;
+                }
+                catch (OperationCanceledException)
+                {
+                    try { pipe?.Dispose(); }
+                    catch { }
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    try { pipe?.Dispose(); }
+                    catch { }
+                    Log.Error("IPC listener failed: " + ex);
                 }
             }
         }
@@ -53,7 +74,7 @@ namespace RTSSGameBar.Helper.Ipc
             return new NamedPipeServerStream(
                 ProtocolConstants.PipeName,
                 PipeDirection.InOut,
-                1,
+                NamedPipeServerStream.MaxAllowedServerInstances,
                 PipeTransmissionMode.Byte,
                 PipeOptions.Asynchronous,
                 4096,
@@ -61,7 +82,48 @@ namespace RTSSGameBar.Helper.Ipc
                 security);
         }
 
-        private async Task HandleConnectionAsync(Stream stream, CancellationToken cancellationToken)
+        private async Task HandleAcceptedConnectionAsync(
+            NamedPipeServerStream pipe,
+            long sessionId,
+            CancellationToken cancellationToken)
+        {
+            // Force the accepted session off the listener continuation even if the client has
+            // already written its first request and ReadLineAsync could complete synchronously.
+            await Task.Yield();
+
+            try
+            {
+                using (pipe)
+                {
+                    await HandleConnectionAsync(pipe, cancellationToken, sessionId).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    Log.Warn("IPC client session canceled unexpectedly. session=" + sessionId + ".");
+                    LogIpc("SESSION_CANCEL session=" + sessionId + ".");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("IPC client session failed. session=" + sessionId + ": " + ex);
+                LogIpc(
+                    "SESSION_FAIL session=" + sessionId +
+                    " hresult=0x" + ex.HResult.ToString("X8") +
+                    " type=" + ex.GetType().FullName +
+                    " message=" + OneLine(ex.Message) + ".");
+            }
+            finally
+            {
+                var activeSessions = Interlocked.Decrement(ref _activeSessions);
+                Log.Info("IPC client disconnected. session=" + sessionId + " active=" + activeSessions + ".");
+                LogIpc("DISCONNECTED session=" + sessionId + " active=" + activeSessions + ".");
+            }
+        }
+
+        private async Task HandleConnectionAsync(Stream stream, CancellationToken cancellationToken, long sessionId)
         {
             using (var reader = new StreamReader(stream, new UTF8Encoding(false), false, 4096, true))
             using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 4096, true) { AutoFlush = true })
@@ -74,9 +136,14 @@ namespace RTSSGameBar.Helper.Ipc
 
                     RtssRequest request = null;
                     RtssResponse response;
+                    var requestClock = Stopwatch.StartNew();
                     try
                     {
                         request = ProtocolJson.Deserialize<RtssRequest>(line);
+                        LogIpc(
+                            "RECEIVED session=" + sessionId +
+                            " id=" + (request.RequestId ?? "<null>") +
+                            " command=" + request.Command + ".");
                         response = Dispatch(request);
                     }
                     catch (Exception ex)
@@ -86,9 +153,81 @@ namespace RTSSGameBar.Helper.Ipc
                     }
 
                     cancellationToken.ThrowIfCancellationRequested();
-                    await writer.WriteLineAsync(ProtocolJson.Serialize(response)).ConfigureAwait(false);
+                    try
+                    {
+                        await writer.WriteLineAsync(ProtocolJson.Serialize(response)).ConfigureAwait(false);
+                        requestClock.Stop();
+                        LogIpc(
+                            "SENT session=" + sessionId +
+                            " id=" + (request?.RequestId ?? response?.RequestId ?? "<null>") +
+                            " command=" + (request == null ? "<unknown>" : request.Command.ToString()) +
+                            " success=" + (response != null && response.Success) +
+                            " errorCode=" + (response?.ErrorCode ?? "<none>") +
+                            " elapsedMs=" + requestClock.ElapsedMilliseconds + ".");
+                    }
+                    catch (Exception ex)
+                    {
+                        requestClock.Stop();
+                        var writeFailure =
+                            "IPC response write failed session=" + sessionId +
+                            " id=" + (request?.RequestId ?? response?.RequestId ?? "<null>") +
+                            " command=" + (request == null ? "<unknown>" : request.Command.ToString()) +
+                            " elapsedMs=" + requestClock.ElapsedMilliseconds +
+                            " hresult=0x" + ex.HResult.ToString("X8") +
+                            " type=" + ex.GetType().FullName +
+                            " message=" + OneLine(ex.Message);
+                        LogIpc("WRITE_FAIL " + writeFailure);
+                        Log.Error(writeFailure);
+                        throw;
+                    }
                 }
             }
+        }
+
+
+        private static void LogIpc(string message)
+        {
+            try
+            {
+                lock (DiagnosticsLock)
+                {
+                    Directory.CreateDirectory(DiagnosticsDirectory);
+                    RotateDiagnosticsLogIfNeeded();
+                    File.AppendAllText(
+                        DiagnosticsFilePath,
+                        string.Format("{0:O} [IPC] {1}{2}", DateTimeOffset.Now, message, Environment.NewLine),
+                        Encoding.UTF8);
+                }
+            }
+            catch
+            {
+                // Diagnostics must never affect helper IPC behavior.
+            }
+        }
+
+        private static void RotateDiagnosticsLogIfNeeded()
+        {
+            try
+            {
+                var info = new FileInfo(DiagnosticsFilePath);
+                if (!info.Exists || info.Length < DiagnosticsRotateAfterBytes)
+                    return;
+
+                try { File.Delete(DiagnosticsPreviousFilePath); }
+                catch { }
+                File.Move(DiagnosticsFilePath, DiagnosticsPreviousFilePath);
+            }
+            catch
+            {
+                // Rotation is best-effort.
+            }
+        }
+
+        private static string OneLine(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return string.Empty;
+            return value.Replace("\r", " ").Replace("\n", " ");
         }
 
         private RtssResponse Dispatch(RtssRequest request)

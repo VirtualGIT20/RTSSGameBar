@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Gaming.XboxGameBar;
 using RTSSGameBar.Protocol;
 using RTSSGameBar.Widget.Ipc;
+using Windows.Storage;
 using Windows.UI;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
@@ -38,13 +40,22 @@ namespace RTSSGameBar.Widget
         private bool _widgetOpacityHooked;
         private bool _widgetThemeHooked;
         private bool _coreWindowVisibilityHooked;
+        private bool _isLoaded;
+        private int _lifecycleGeneration;
+        private int _loggedVisibilityReadErrorGeneration = -1;
+        private static readonly object LifecycleLogLock = new object();
+        private const string LifecycleLogFileName = "widget-lifecycle.log";
         private string _lastRenderedStatusKey;
         private bool _syncingControls;
 
-        private static readonly SolidColorBrush LedGreen = new SolidColorBrush(Color.FromArgb(255, 52, 199, 89));
-        private static readonly SolidColorBrush LedAmber = new SolidColorBrush(Color.FromArgb(255, 255, 185, 0));
-        private static readonly SolidColorBrush LedRed = new SolidColorBrush(Color.FromArgb(255, 255, 69, 58));
-        private static readonly SolidColorBrush LedGray = new SolidColorBrush(Color.FromArgb(255, 120, 120, 120));
+        // Never cache XAML DependencyObject instances in static fields. Game Bar can tear down
+        // and recreate a XAML view while keeping the widget process alive; a static Brush can then
+        // retain an RCW whose underlying COM object belongs to the old view. Keep only value-type
+        // colors static and create fresh brushes for the current XAML view when rendering status.
+        private static readonly Color LedGreenColor = Color.FromArgb(255, 52, 199, 89);
+        private static readonly Color LedAmberColor = Color.FromArgb(255, 255, 185, 0);
+        private static readonly Color LedRedColor = Color.FromArgb(255, 255, 69, 58);
+        private static readonly Color LedGrayColor = Color.FromArgb(255, 120, 120, 120);
 
         public GamingWidget()
         {
@@ -72,28 +83,54 @@ namespace RTSSGameBar.Widget
 
         private async void GamingWidget_Loaded(object sender, RoutedEventArgs e)
         {
-            HookWindowVisibility();
-            HookWidgetAppearance();
-            DetailText.Text = "Starting local bridge…";
-
-            // Yield once so the lightweight shell can paint before helper discovery begins.
-            await Task.Delay(1);
-
-            var launch = await _helperLauncher.EnsureRunningAsync();
-            if (!launch.Success)
+            var generation = ++_lifecycleGeneration;
+            _isLoaded = true;
+            try
             {
-                SetError(launch.ToString());
-                ApplyStatus(null);
-                return;
+                HookWindowVisibility();
+                HookWidgetAppearance();
+                DetailText.Text = "Starting local bridge…";
+
+                // Yield once so the lightweight shell can paint before helper discovery begins.
+                await Task.Delay(1);
+                if (!IsLifecycleCurrent(generation))
+                    return;
+
+                var launch = await _helperLauncher.EnsureRunningAsync();
+                if (!IsLifecycleCurrent(generation))
+                    return;
+                if (!launch.Success)
+                {
+                    SetError(launch.ToString());
+                    ApplyStatus(null);
+                    return;
+                }
+
+                await RefreshStatusAsync();
+                if (!IsLifecycleCurrent(generation))
+                    return;
+
+                ConfigureRefreshTimerForCurrentVisibility();
             }
-
-            await RefreshStatusAsync();
-
-            ConfigureRefreshTimerForCurrentVisibility();
+            catch (Exception ex)
+            {
+                LogLifecycleException("GamingWidget.Loaded", ex);
+                if (IsLifecycleCurrent(generation))
+                {
+                    try
+                    {
+                        _refreshTimer.Stop();
+                        SetError("Widget initialization failed: " + ex.Message);
+                    }
+                    catch { }
+                }
+            }
         }
 
         private void GamingWidget_Unloaded(object sender, RoutedEventArgs e)
         {
+            _isLoaded = false;
+            ++_lifecycleGeneration;
             _refreshTimer.Stop();
             UnhookWindowVisibility();
             UnhookWidgetAppearance();
@@ -102,16 +139,30 @@ namespace RTSSGameBar.Widget
 
         private async void RefreshTimer_Tick(object sender, object e)
         {
-            // Visibility events normally stop the timer. Re-check here as a cheap race/fallback
-            // guard so a queued tick can never turn into hidden RTSS polling.
-            if (!IsCurrentlyVisible())
+            var generation = _lifecycleGeneration;
+            try
             {
-                _refreshTimer.Stop();
-                return;
-            }
+                if (!IsLifecycleCurrent(generation))
+                {
+                    _refreshTimer.Stop();
+                    return;
+                }
 
-            if (_pendingCommands == 0 && !_frameCommitPending && !_frameWriterRunning && !_zoomCommitPending && !_zoomWriterRunning)
-                await RefreshStatusAsync(false);
+                // Visibility events normally stop the timer. Re-check here as a cheap race/fallback
+                // guard so a queued tick can never turn into hidden RTSS polling.
+                if (!IsCurrentlyVisible())
+                {
+                    _refreshTimer.Stop();
+                    return;
+                }
+
+                if (_pendingCommands == 0 && !_frameCommitPending && !_frameWriterRunning && !_zoomCommitPending && !_zoomWriterRunning)
+                    await RefreshStatusAsync(false);
+            }
+            catch (Exception ex)
+            {
+                LogLifecycleException("RefreshTimer.Tick", ex);
+            }
         }
 
         private async Task<bool> RefreshStatusAsync(bool showErrors = true)
@@ -191,8 +242,8 @@ namespace RTSSGameBar.Widget
 
             if (status == null)
             {
-                RtssStatusLed.Fill = LedGray;
-                IntegrationStatusLed.Fill = LedGray;
+                RtssStatusLed.Fill = new SolidColorBrush(LedGrayColor);
+                IntegrationStatusLed.Fill = new SolidColorBrush(LedGrayColor);
                 RtssStateText.Text = "Unavailable";
                 IntegrationStateText.Text = "Unknown";
                 DetailText.Text = "The local helper is not connected.";
@@ -225,8 +276,9 @@ namespace RTSSGameBar.Widget
 
             RtssStateText.Text = !status.Installed ? "Not installed" : !status.Running ? "Stopped" : "Running";
             IntegrationStateText.Text = IntegrationStateDisplayName(status.IntegrationState);
-            RtssStatusLed.Fill = !status.Installed ? LedRed : status.Running ? LedGreen : LedGray;
-            IntegrationStatusLed.Fill = IntegrationLedBrush(status.IntegrationState);
+            RtssStatusLed.Fill = new SolidColorBrush(
+                !status.Installed ? LedRedColor : status.Running ? LedGreenColor : LedGrayColor);
+            IntegrationStatusLed.Fill = new SolidColorBrush(IntegrationLedColor(status.IntegrationState));
             DetailText.Text = status.Detail ?? string.Empty;
 
             _syncingControls = true;
@@ -1054,14 +1106,16 @@ namespace RTSSGameBar.Widget
             }
         }
 
-        private async void Widget_RequestedOpacityChanged(XboxGameBarWidget sender, object args)
+        private void Widget_RequestedOpacityChanged(XboxGameBarWidget sender, object args)
         {
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Low, ApplyRequestedWidgetAppearance);
+            var generation = _lifecycleGeneration;
+            _ = DispatchLifecycleAsync("Widget.RequestedOpacityChanged", generation, ApplyRequestedWidgetAppearance);
         }
 
-        private async void Widget_RequestedThemeChanged(XboxGameBarWidget sender, object args)
+        private void Widget_RequestedThemeChanged(XboxGameBarWidget sender, object args)
         {
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Low, ApplyRequestedWidgetAppearance);
+            var generation = _lifecycleGeneration;
+            _ = DispatchLifecycleAsync("Widget.RequestedThemeChanged", generation, ApplyRequestedWidgetAppearance);
         }
 
         private void HookWindowVisibility()
@@ -1119,38 +1173,58 @@ namespace RTSSGameBar.Widget
             _coreWindowVisibilityHooked = false;
         }
 
-        private async void Widget_VisibleChanged(XboxGameBarWidget sender, object args)
+        private void Widget_VisibleChanged(XboxGameBarWidget sender, object args)
         {
-            if (sender == null)
-                return;
-
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
+            // Do not retain or dereference the WinRT event sender after an asynchronous hop.
+            // Game Bar can invalidate the COM wrapper while a low-priority dispatcher callback
+            // is queued. Re-read the current state through the guarded widget accessor instead.
+            var generation = _lifecycleGeneration;
+            _ = DispatchLifecycleAsync("Widget.VisibleChanged", generation, () =>
             {
-                ConfigureRefreshTimerForCurrentVisibility();
-                if (!sender.Visible)
-                    return;
-
-                ResetScrollToTop();
-                _ = RefreshStatusAsync(false);
+                HandleVisibilityChanged(IsCurrentlyVisible(), generation, "Widget.VisibleChanged");
             });
         }
 
-        private async void CoreWindow_VisibilityChanged(CoreWindow sender, VisibilityChangedEventArgs args)
+        private void CoreWindow_VisibilityChanged(CoreWindow sender, VisibilityChangedEventArgs args)
         {
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
+            bool visible;
+            try
             {
-                ConfigureRefreshTimerForCurrentVisibility();
-                if (!args.Visible)
-                    return;
+                // VisibilityChangedEventArgs is a WinRT object too. Snapshot the primitive value
+                // synchronously so the object never crosses the dispatcher boundary.
+                visible = args != null && args.Visible;
+            }
+            catch (Exception ex)
+            {
+                LogLifecycleException("CoreWindow.VisibilityChanged.ReadVisible", ex);
+                return;
+            }
 
-                ResetScrollToTop();
-                _ = RefreshStatusAsync(false);
+            var generation = _lifecycleGeneration;
+            _ = DispatchLifecycleAsync("CoreWindow.VisibilityChanged", generation, () =>
+            {
+                HandleVisibilityChanged(visible, generation, "CoreWindow.VisibilityChanged");
             });
+        }
+
+        private void HandleVisibilityChanged(bool visible, int generation, string source)
+        {
+            ConfigureRefreshTimer(visible);
+            if (!visible)
+                return;
+
+            ResetScrollToTop();
+            _ = ObserveLifecycleTaskAsync(source + ".Refresh", generation, RefreshStatusAsync(false));
         }
 
         private void ConfigureRefreshTimerForCurrentVisibility()
         {
-            if (!IsCurrentlyVisible())
+            ConfigureRefreshTimer(IsCurrentlyVisible());
+        }
+
+        private void ConfigureRefreshTimer(bool visible)
+        {
+            if (!visible)
             {
                 _refreshTimer.Stop();
                 return;
@@ -1160,12 +1234,100 @@ namespace RTSSGameBar.Widget
             _refreshTimer.Start();
         }
 
+        private bool IsLifecycleCurrent(int generation)
+        {
+            return _isLoaded && generation == _lifecycleGeneration;
+        }
+
+        private async Task DispatchLifecycleAsync(string source, int generation, Action action)
+        {
+            if (!IsLifecycleCurrent(generation))
+                return;
+
+            try
+            {
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
+                {
+                    if (!IsLifecycleCurrent(generation))
+                        return;
+
+                    try
+                    {
+                        action();
+                    }
+                    catch (Exception ex)
+                    {
+                        LogLifecycleException(source + ".Callback", ex);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                LogLifecycleException(source + ".Dispatch", ex);
+            }
+        }
+
+        private async Task ObserveLifecycleTaskAsync(string source, int generation, Task task)
+        {
+            try
+            {
+                await task;
+            }
+            catch (Exception ex)
+            {
+                LogLifecycleException(source, ex);
+                if (IsLifecycleCurrent(generation))
+                {
+                    try { _refreshTimer.Stop(); }
+                    catch { }
+                }
+            }
+        }
+
+        private void LogLifecycleException(string source, Exception ex)
+        {
+            try
+            {
+                var entry = string.Format(
+                    "{0:O} [ERROR] {1} generation={2} loaded={3} hresult=0x{4:X8} type={5} message={6}{7}{8}{7}",
+                    DateTimeOffset.Now,
+                    source ?? "Lifecycle",
+                    _lifecycleGeneration,
+                    _isLoaded,
+                    ex?.HResult ?? 0,
+                    ex?.GetType().FullName ?? "<null>",
+                    ex?.Message ?? string.Empty,
+                    Environment.NewLine,
+                    ex?.ToString() ?? string.Empty);
+
+                lock (LifecycleLogLock)
+                {
+                    var path = Path.Combine(ApplicationData.Current.LocalFolder.Path, LifecycleLogFileName);
+                    File.AppendAllText(path, entry);
+                }
+            }
+            catch
+            {
+                // Diagnostics must never become another failure path during Game Bar teardown.
+            }
+        }
+
         private bool IsCurrentlyVisible()
         {
             if (_widget != null)
             {
                 try { return _widget.Visible; }
-                catch { }
+                catch (Exception ex)
+                {
+                    // If Game Bar invalidates the WinRT wrapper while the Page is still alive,
+                    // record the first failure for this lifecycle generation and fall back to
+                    // CoreWindow visibility instead of allowing the COM error to escape.
+                    if (_loggedVisibilityReadErrorGeneration != _lifecycleGeneration)
+                    {
+                        _loggedVisibilityReadErrorGeneration = _lifecycleGeneration;
+                        LogLifecycleException("IsCurrentlyVisible.WidgetVisible", ex);
+                    }
+                }
             }
 
             try
@@ -1179,21 +1341,21 @@ namespace RTSSGameBar.Widget
             }
         }
 
-        private static SolidColorBrush IntegrationLedBrush(RtssIntegrationState state)
+        private static Color IntegrationLedColor(RtssIntegrationState state)
         {
             switch (state)
             {
                 case RtssIntegrationState.Connected:
-                    return LedGreen;
+                    return LedGreenColor;
                 case RtssIntegrationState.UpdateRequired:
                 case RtssIntegrationState.Disabled:
                 case RtssIntegrationState.Incompatible:
-                    return LedAmber;
+                    return LedAmberColor;
                 case RtssIntegrationState.Error:
                 case RtssIntegrationState.RtssNotInstalled:
-                    return LedRed;
+                    return LedRedColor;
                 default:
-                    return LedGray;
+                    return LedGrayColor;
             }
         }
 
