@@ -28,29 +28,27 @@ namespace RTSSGameBar.Widget.Ipc
                 throw new ArgumentNullException(nameof(request));
 
             var totalClock = Stopwatch.StartNew();
-            var gateClock = Stopwatch.StartNew();
-            LogIpc("BEGIN id=" + request.RequestId + " command=" + request.Command + " timeoutMs=" + timeoutMs + ".");
+            var stage = "gate";
+            var responseTimeoutLogged = false;
 
             await _gate.WaitAsync().ConfigureAwait(false);
-            gateClock.Stop();
-            if (gateClock.ElapsedMilliseconds >= 50)
-                LogIpc("GATE id=" + request.RequestId + " command=" + request.Command + " waitMs=" + gateClock.ElapsedMilliseconds + ".");
-
             try
             {
-                await EnsureConnectedAsync(timeoutMs, request).ConfigureAwait(false);
-
                 try
                 {
-                    await _writer.WriteLineAsync(ProtocolJson.Serialize(request)).ConfigureAwait(false);
-                    LogIpc("SENT id=" + request.RequestId + " command=" + request.Command + " elapsedMs=" + totalClock.ElapsedMilliseconds + ".");
+                    stage = "connect";
+                    await EnsureConnectedAsync(timeoutMs).ConfigureAwait(false);
 
+                    stage = "write";
+                    await _writer.WriteLineAsync(ProtocolJson.Serialize(request)).ConfigureAwait(false);
+
+                    stage = "read";
                     var responseClock = Stopwatch.StartNew();
                     var readTask = _reader.ReadLineAsync();
                     var completed = await Task.WhenAny(readTask, Task.Delay(timeoutMs)).ConfigureAwait(false);
                     if (completed != readTask)
                     {
-                        responseClock.Stop();
+                        responseTimeoutLogged = true;
                         LogIpc(
                             "TIMEOUT id=" + request.RequestId +
                             " command=" + request.Command +
@@ -62,22 +60,13 @@ namespace RTSSGameBar.Widget.Ipc
                     }
 
                     var responseLine = await readTask.ConfigureAwait(false);
-                    responseClock.Stop();
                     if (responseLine == null)
                         throw new IOException("Helper closed the IPC connection without a response.");
 
+                    stage = "deserialize";
                     var response = ProtocolJson.Deserialize<RtssResponse>(responseLine);
                     if (response.ProtocolVersion != ProtocolConstants.Version)
                         throw new InvalidOperationException("Helper protocol version mismatch.");
-
-                    LogIpc(
-                        "RECV id=" + request.RequestId +
-                        " command=" + request.Command +
-                        " responseId=" + (response.RequestId ?? "<null>") +
-                        " success=" + response.Success +
-                        " errorCode=" + (response.ErrorCode ?? "<none>") +
-                        " responseWaitMs=" + responseClock.ElapsedMilliseconds +
-                        " totalMs=" + totalClock.ElapsedMilliseconds + ".");
 
                     if (!string.Equals(response.RequestId, request.RequestId, StringComparison.Ordinal))
                     {
@@ -91,13 +80,18 @@ namespace RTSSGameBar.Widget.Ipc
                 }
                 catch (Exception ex)
                 {
-                    LogIpc(
-                        "ERROR id=" + request.RequestId +
-                        " command=" + request.Command +
-                        " totalMs=" + totalClock.ElapsedMilliseconds +
-                        " hresult=0x" + ex.HResult.ToString("X8") +
-                        " type=" + ex.GetType().FullName +
-                        " message=" + OneLine(ex.Message) + ".");
+                    if (!responseTimeoutLogged)
+                    {
+                        LogIpc(
+                            "ERROR id=" + request.RequestId +
+                            " command=" + request.Command +
+                            " stage=" + stage +
+                            " totalMs=" + totalClock.ElapsedMilliseconds +
+                            " hresult=0x" + ex.HResult.ToString("X8") +
+                            " type=" + ex.GetType().FullName +
+                            " message=" + OneLine(ex.Message) + ".");
+                    }
+
                     ResetConnection();
                     throw;
                 }
@@ -118,7 +112,7 @@ namespace RTSSGameBar.Widget.Ipc
             ResetConnection();
         }
 
-        private async Task EnsureConnectedAsync(int timeoutMs, RtssRequest request)
+        private async Task EnsureConnectedAsync(int timeoutMs)
         {
             if (_pipe != null && _pipe.IsConnected)
                 return;
@@ -129,28 +123,16 @@ namespace RTSSGameBar.Widget.Ipc
                 ProtocolConstants.PipeName,
                 PipeDirection.InOut,
                 PipeOptions.Asynchronous);
-            var connectClock = Stopwatch.StartNew();
-            LogIpc("CONNECT_BEGIN id=" + request.RequestId + " command=" + request.Command + " timeoutMs=" + timeoutMs + ".");
 
             try
             {
                 await pipe.ConnectAsync(timeoutMs).ConfigureAwait(false);
-                connectClock.Stop();
                 _pipe = pipe;
                 _reader = new StreamReader(_pipe, new UTF8Encoding(false), false, 4096, true);
                 _writer = new StreamWriter(_pipe, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
-                LogIpc("CONNECT_OK id=" + request.RequestId + " command=" + request.Command + " elapsedMs=" + connectClock.ElapsedMilliseconds + ".");
             }
-            catch (Exception ex)
+            catch
             {
-                connectClock.Stop();
-                LogIpc(
-                    "CONNECT_FAIL id=" + request.RequestId +
-                    " command=" + request.Command +
-                    " elapsedMs=" + connectClock.ElapsedMilliseconds +
-                    " hresult=0x" + ex.HResult.ToString("X8") +
-                    " type=" + ex.GetType().FullName +
-                    " message=" + OneLine(ex.Message) + ".");
                 pipe.Dispose();
                 throw;
             }

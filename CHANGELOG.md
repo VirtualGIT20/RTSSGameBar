@@ -2,6 +2,19 @@
 
 All notable public changes to RTSS Game Bar are documented here.
 
+## 1.0.2 - 2026-09-10
+
+### Fixed
+
+- Made the Widget/Helper named-pipe server multi-client so a stale Game Bar widget process can no longer block a replacement widget from connecting to the helper.
+- Hardened Game Bar lifecycle callbacks against WinRT/COM objects being invalidated while asynchronous dispatcher work is still queued.
+- Stopped caching `SolidColorBrush` dependency objects in static fields; status brushes are now recreated for the active XAML view to avoid `InvalidComObjectException` after Game Bar view teardown/recreation.
+
+### Changed
+
+- Kept targeted local diagnostics for IPC failures/timeouts and lifecycle exceptions while removing verbose per-request success tracing used during investigation.
+- Widget/Helper IPC remains protocol v19; RTSS plugin IPC remains protocol v6 and the bundled RTSS plugin remains v1.0.0.
+
 ## 1.0.1 - 2026-08-12
 
 ### Fixed

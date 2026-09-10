@@ -4,7 +4,7 @@
 
 - Package identity is `VirtualGIT20.RTSSGameBar`.
 - Publisher is `CN=VirtualGIT20`.
-- Package and assembly version is `1.0.1.0` for release `v1.0.1`.
+- Package and assembly version is `1.0.2.0` for release `v1.0.2`.
 - Widget/Helper protocol is v19 on `RTSSGameBar.v19`.
 - RTSS plugin protocol remains v6 and bundled plugin version is `1.0.0`.
 - Xbox Game Bar SDK remains pinned to `7.3.2506120`.
@@ -31,12 +31,15 @@
 - Confirm no periodic RTSS reads while the widget is hidden.
 - Test RTSS start/close.
 - Test Integration Install/Update/Remove and RTSS restart behavior.
+- Repeatedly close/reopen Game Bar and the widget; confirm replacement Widget instances can connect even if an older Widget process is still alive.
+- Confirm no `InvalidComObjectException` / `Widget initialization failed` appears after Game Bar view teardown/recreation.
+- Confirm `widget-ipc.log` and `helper-ipc.log` stay quiet during successful IPC and only record failures/timeouts or exceptional conditions.
 
 ## GitHub release
 
 - Run `scripts\prepare-github-release.ps1` on the signed package.
 - Verify `SHA256SUMS.txt` against the release files.
-- Publish source tag `v1.0.1` and matching release notes.
+- Publish source tag `v1.0.2` and matching release notes.
 - State clearly that RTSS is required and not bundled.
 - State clearly that the project is independent/unofficial.
 - Document that Integration -> Remove should be used before uninstalling the app package if the user wants the external RTSS plugin removed.

@@ -1,9 +1,9 @@
 # Testing
 
-## Public v1.0.1 smoke test
+## Public v1.0.2 smoke test
 
 1. Remove any old `VirtualGIT20.RTSSGameBar.POC` package so only the public widget is present.
-2. Build/sign/install package `1.0.1.0` with a certificate whose Subject is `CN=VirtualGIT20`.
+2. Build/sign/install package `1.0.2.0` with a certificate whose Subject is `CN=VirtualGIT20`.
 3. Open Xbox Game Bar and confirm the widget appears as `RTSS Game Bar`.
 4. If the previously installed RTSS plugin is an older development build, confirm Integration shows `Update`, perform the update, and confirm the plugin reports v1.0.0 afterward.
 5. Verify controller navigation through Frame limiter, Preset, Limiter type, Limiter, Overlay, OSD size, OSD position, RTSS, Integration, and Refresh.
@@ -14,7 +14,10 @@
 10. Hide the widget and confirm there is no periodic RTSS state polling; show it again and confirm immediate reconciliation.
 11. Test RTSS start/close and integration Install/Update/Remove. For each integration action, confirm `%LOCALAPPDATA%\RTSSGameBar\setup.log` reaches `Setup started`, completes the requested file operation, and exits with code 0.
 12. On Windows 11 25H2 build 26200.9168 or newer, repeat at least one Integration Update plus Remove/Install cycle and confirm the native `RTSSGameBar.Setup.exe` returns promptly with no lingering setup process. This specifically guards the packaged/elevated .NET Framework bootstrap regression reproduced on 26200.8973 and 26200.9168.
-13. Before package uninstall, test Integration -> Remove and confirm the RTSS plugin file is removed.
+13. Repeatedly close/reopen Game Bar and the widget. If an older `RTSSGameBar.Widget.exe` process remains alive, confirm a replacement Widget still connects and refreshes status instead of reporting an 8-second IPC timeout.
+14. Exercise hide/show and Game Bar view teardown/recreation; confirm no `InvalidComObjectException` (`0x80131527`) or `Widget initialization failed` message is produced.
+15. During successful operation, confirm the targeted diagnostic files do not receive per-request success traffic; they should only be created/updated for IPC failures/timeouts or lifecycle exceptions.
+16. Before package uninstall, test Integration -> Remove and confirm the RTSS plugin file is removed.
 
 ## Static validation
 

@@ -45,7 +45,6 @@ namespace RTSSGameBar.Helper.Ipc
                     var sessionId = Interlocked.Increment(ref _nextSessionId);
                     var activeSessions = Interlocked.Increment(ref _activeSessions);
                     Log.Info("IPC client connected (persistent session). session=" + sessionId + " active=" + activeSessions + ".");
-                    LogIpc("CONNECTED session=" + sessionId + " active=" + activeSessions + ".");
 
                     // Game Bar can create a replacement widget before an older widget process
                     // releases its persistent pipe. Hand the accepted connection to its own
@@ -119,7 +118,6 @@ namespace RTSSGameBar.Helper.Ipc
             {
                 var activeSessions = Interlocked.Decrement(ref _activeSessions);
                 Log.Info("IPC client disconnected. session=" + sessionId + " active=" + activeSessions + ".");
-                LogIpc("DISCONNECTED session=" + sessionId + " active=" + activeSessions + ".");
             }
         }
 
@@ -140,15 +138,17 @@ namespace RTSSGameBar.Helper.Ipc
                     try
                     {
                         request = ProtocolJson.Deserialize<RtssRequest>(line);
-                        LogIpc(
-                            "RECEIVED session=" + sessionId +
-                            " id=" + (request.RequestId ?? "<null>") +
-                            " command=" + request.Command + ".");
                         response = Dispatch(request);
                     }
                     catch (Exception ex)
                     {
                         Log.Warn("Bad IPC request: " + ex.Message);
+                        LogIpc(
+                            "REQUEST_FAIL session=" + sessionId +
+                            " id=" + (request?.RequestId ?? "<null>") +
+                            " hresult=0x" + ex.HResult.ToString("X8") +
+                            " type=" + ex.GetType().FullName +
+                            " message=" + OneLine(ex.Message) + ".");
                         response = RtssResponse.Fail(request, "bad_request", ex.Message);
                     }
 
@@ -157,13 +157,6 @@ namespace RTSSGameBar.Helper.Ipc
                     {
                         await writer.WriteLineAsync(ProtocolJson.Serialize(response)).ConfigureAwait(false);
                         requestClock.Stop();
-                        LogIpc(
-                            "SENT session=" + sessionId +
-                            " id=" + (request?.RequestId ?? response?.RequestId ?? "<null>") +
-                            " command=" + (request == null ? "<unknown>" : request.Command.ToString()) +
-                            " success=" + (response != null && response.Success) +
-                            " errorCode=" + (response?.ErrorCode ?? "<none>") +
-                            " elapsedMs=" + requestClock.ElapsedMilliseconds + ".");
                     }
                     catch (Exception ex)
                     {

@@ -64,7 +64,7 @@ manifest = (ROOT / 'src/RTSSGameBar.Widget/Package.appxmanifest').read_text(enco
 for needle in [
     'Name="VirtualGIT20.RTSSGameBar"',
     'Publisher="CN=VirtualGIT20"',
-    'Version="1.0.1.0"',
+    'Version="1.0.2.0"',
     '<PublisherDisplayName>VirtualGIT20</PublisherDisplayName>',
     'DisplayName="RTSS Game Bar"',
     'Name="microsoft.gameBarUIExtension"',
@@ -87,8 +87,8 @@ assembly_info = (ROOT / 'src/RTSSGameBar.Widget/Properties/AssemblyInfo.cs').rea
 for needle in [
     'AssemblyCompany("VirtualGIT20")',
     'AssemblyProduct("RTSS Game Bar")',
-    'AssemblyVersion("1.0.1.0")',
-    'AssemblyFileVersion("1.0.1.0")',
+    'AssemblyVersion("1.0.2.0")',
+    'AssemblyFileVersion("1.0.2.0")',
 ]:
     if needle not in assembly_info:
         errors.append('widget assembly metadata missing: ' + needle)
@@ -98,8 +98,8 @@ for rel in [
     'src/RTSSGameBar.Helper/RTSSGameBar.Helper.csproj',
 ]:
     text = (ROOT / rel).read_text(encoding='utf-8')
-    for needle in ['<Version>1.0.1</Version>', '<AssemblyVersion>1.0.1.0</AssemblyVersion>',
-                   '<FileVersion>1.0.1.0</FileVersion>', '<Company>VirtualGIT20</Company>',
+    for needle in ['<Version>1.0.2</Version>', '<AssemblyVersion>1.0.2.0</AssemblyVersion>',
+                   '<FileVersion>1.0.2.0</FileVersion>', '<Company>VirtualGIT20</Company>',
                    '<Product>RTSS Game Bar</Product>']:
         if needle not in text:
             errors.append(f'public assembly metadata missing in {rel}: {needle}')
@@ -135,6 +135,13 @@ if 'Local\\RTSSGameBar.Helper.v19.Singleton' not in helper_src:
     errors.append('public helper mutex does not match protocol v19')
 if 'Helper.POC' in helper_src:
     errors.append('development POC helper mutex/name remains')
+pipe_server = (ROOT / 'src/RTSSGameBar.Helper/Ipc/PipeServer.cs').read_text(encoding='utf-8')
+for needle in ['NamedPipeServerStream.MaxAllowedServerInstances', 'HandleAcceptedConnectionAsync', '_activeSessions']:
+    if needle not in pipe_server:
+        errors.append('helper multi-client pipe fix missing: ' + needle)
+for noisy in ['LogIpc("CONNECTED ', 'LogIpc("DISCONNECTED ', '"RECEIVED session="', '"SENT session="']:
+    if noisy in pipe_server:
+        errors.append('verbose helper IPC success tracing remains: ' + noisy)
 
 setup = (ROOT / 'src/RTSSGameBar.Setup/Setup.cpp').read_text(encoding='utf-8')
 for needle in [
@@ -157,7 +164,7 @@ for needle in ['Debug|x64', 'Release|x64', 'MachineX64', '<PlatformToolset>v145<
     if needle not in setup_project:
         errors.append('native setup project config missing: ' + needle)
 setup_resource = (ROOT / 'src/RTSSGameBar.Setup/RTSSGameBar.Setup.rc').read_text(encoding='utf-8')
-for needle in ['FILEVERSION 1,0,1,0', 'PRODUCTVERSION 1,0,1,0', 'VirtualGIT20', 'RTSS Game Bar Integration Setup']:
+for needle in ['FILEVERSION 1,0,2,0', 'PRODUCTVERSION 1,0,2,0', 'VirtualGIT20', 'RTSS Game Bar Integration Setup']:
     if needle not in setup_resource:
         errors.append('native setup version resource missing: ' + needle)
 setup_manifest = (ROOT / 'src/RTSSGameBar.Setup/app.manifest').read_text(encoding='utf-8')
@@ -189,7 +196,7 @@ for needle in [
     'Text="RTSS Game Bar"', 'FrameLimitSlider', 'FrameLimitPresetComboBox', 'LimiterTypeComboBox',
     'LimiterEnabledToggle', 'OverlayToggle', 'OsdZoomSlider', 'OsdPositionComboBox',
     'RtssActionButton', 'IntegrationActionButton', 'RefreshButton',
-    '<Slider ', '<ComboBox ', '<ToggleSwitch ', 'Symbol="Sync"', 'Text="v1.0.1"'
+    '<Slider ', '<ComboBox ', '<ToggleSwitch ', 'Symbol="Sync"', 'Text="v1.0.2"'
 ]:
     if needle not in widget_xaml:
         errors.append('controller UI missing: ' + needle)
@@ -215,6 +222,18 @@ for needle in [
         errors.append('widget behavior missing: ' + needle)
 if 'if (wasRunning && _status.PluginConnected)' not in widget_cs:
     errors.append('widget integration pre-stop is not gated on PluginConnected')
+for needle in ['_lifecycleGeneration', 'DispatchLifecycleAsync', 'LogLifecycleException', 'LedGreenColor', 'IntegrationLedColor']:
+    if needle not in widget_cs:
+        errors.append('widget lifecycle/COM hardening missing: ' + needle)
+if 'static readonly SolidColorBrush' in widget_cs:
+    errors.append('widget caches XAML SolidColorBrush dependency objects statically')
+pipe_client = (ROOT / 'src/RTSSGameBar.Widget/Ipc/PipeClient.cs').read_text(encoding='utf-8')
+for needle in ['TIMEOUT id=', 'stage=', 'widget-ipc.log']:
+    if needle not in pipe_client:
+        errors.append('targeted widget IPC diagnostics missing: ' + needle)
+for noisy in ['"BEGIN id="', '"SENT id="', '"RECV id="', '"CONNECT_BEGIN id="', '"CONNECT_OK id="']:
+    if noisy in pipe_client:
+        errors.append('verbose widget IPC success tracing remains: ' + noisy)
 if 'TryMinimizeForElevationAsync' in widget_cs or 'Game Bar will move out of the foreground' in widget_cs:
     errors.append('stale minimize-before-UAC behavior/text remains')
 for needle in [
@@ -397,4 +416,4 @@ if errors:
 
 print('Static checks passed.')
 print(f'Checked {len(xml_files)} XML project/manifest/XAML files.')
-print('RTSS Game Bar v1.0.1: public identity VirtualGIT20.RTSSGameBar; Widget/Helper protocol v19; RTSS plugin v1.0.0 on protocol v6.')
+print('RTSS Game Bar v1.0.2: public identity VirtualGIT20.RTSSGameBar; Widget/Helper protocol v19; RTSS plugin v1.0.0 on protocol v6.')
