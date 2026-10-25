@@ -48,6 +48,13 @@ namespace RTSSGameBar.Widget
         private string _lastRenderedStatusKey;
         private bool _syncingControls;
 
+        private string _selectedProfile = ProtocolConstants.GlobalProfile;
+        private bool _manualProfileSelection;
+        private string _manualHintSnapshot = string.Empty;
+        private List<string> _profileList = new List<string>();
+        private string _activeProfileHint = string.Empty;
+        private string _profileMissing = string.Empty;
+
         // Never cache XAML DependencyObject instances in static fields. Game Bar can tear down
         // and recreate a XAML view while keeping the widget process alive; a static Brush can then
         // retain an RCW whose underlying COM object belongs to the old view. Keep only value-type
@@ -173,11 +180,23 @@ namespace RTSSGameBar.Widget
             _refreshing = true;
             try
             {
-                var response = await _pipeClient.SendAsync(new RtssRequest { Command = RtssCommand.GetStatus }, 2600);
+                var response = await SendStatusRequestAsync();
                 if (!response.Success)
                     throw new InvalidOperationException(response.ErrorMessage ?? response.ErrorCode ?? "Status request failed.");
 
-                _status = response.Status;
+                var status = response.Status;
+                var desired = ResolveDesiredProfile(status);
+                if (!string.Equals(desired, _selectedProfile, StringComparison.OrdinalIgnoreCase))
+                {
+                    // The hinted game profile changed (game started/stopped). Re-read once with the
+                    // new profile so the visible values always belong to the selected profile.
+                    _selectedProfile = desired;
+                    var second = await SendStatusRequestAsync();
+                    if (second.Success && second.Status != null)
+                        status = second.Status;
+                }
+
+                _status = status;
                 CaptureCommittedValues(_status);
                 ApplyStatus(_status);
                 if (showErrors)
@@ -192,7 +211,7 @@ namespace RTSSGameBar.Widget
                 {
                     try
                     {
-                        var retry = await _pipeClient.SendAsync(new RtssRequest { Command = RtssCommand.GetStatus }, 2600);
+                        var retry = await SendStatusRequestAsync();
                         if (retry.Success)
                         {
                             _status = retry.Status;
@@ -215,6 +234,46 @@ namespace RTSSGameBar.Widget
             {
                 _refreshing = false;
             }
+        }
+
+        private Task<RtssResponse> SendStatusRequestAsync()
+        {
+            return _pipeClient.SendAsync(new RtssRequest
+            {
+                Command = RtssCommand.GetStatus,
+                Profile = _selectedProfile
+            }, 2600);
+        }
+
+        private string ResolveDesiredProfile(RtssStatus status)
+        {
+            var hint = status?.ActiveProfileHint ?? string.Empty;
+            if (_manualProfileSelection)
+            {
+                // A manual choice stays in effect until the running game changes.
+                if (string.Equals(_manualHintSnapshot, hint, StringComparison.OrdinalIgnoreCase))
+                    return _selectedProfile;
+                _manualProfileSelection = false;
+            }
+
+            if (!string.IsNullOrEmpty(hint) && ProfileExists(status?.AvailableProfiles, hint))
+                return hint;
+            return ProtocolConstants.GlobalProfile;
+        }
+
+        private static bool ProfileExists(IEnumerable<string> profiles, string profile)
+        {
+            if (string.IsNullOrEmpty(profile))
+                return true;
+            if (profiles == null)
+                return false;
+
+            foreach (var candidate in profiles)
+            {
+                if (string.Equals(candidate, profile, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
 
         private void CaptureCommittedValues(RtssStatus status)
@@ -261,11 +320,21 @@ namespace RTSSGameBar.Widget
                     OsdZoomSlider.Value = 1;
                     OsdZoomValueText.Text = "--";
                     OsdPositionComboBox.SelectedIndex = -1;
+                    ProfileComboBox.Items.Clear();
+                    ProfileComboBox.SelectedIndex = -1;
                 }
                 finally
                 {
                     _syncingControls = false;
                 }
+
+                // Keep the current profile selection: a transient helper failure must not
+                // silently move the user (and later writes) to Global. The selector is
+                // repopulated and re-selected on the next successful status read.
+                _profileList = new List<string>();
+                _activeProfileHint = string.Empty;
+                _profileMissing = string.Empty;
+                ProfileHintText.Text = string.Empty;
 
                 SetControlAvailability(false);
                 RtssActionButton.IsEnabled = false;
@@ -320,6 +389,9 @@ namespace RTSSGameBar.Widget
             {
                 _syncingControls = false;
             }
+
+            SyncProfileComboBox(status);
+            UpdateProfileHintText(status);
 
             var installedVersion = string.IsNullOrWhiteSpace(status.PluginVersion) ? "unknown" : status.PluginVersion;
             var bundledVersion = string.IsNullOrWhiteSpace(status.BundledPluginVersion) ? ProtocolConstants.BundledPluginVersion : status.BundledPluginVersion;
@@ -383,7 +455,7 @@ namespace RTSSGameBar.Widget
             }
         }
 
-        private static string BuildRenderStatusKey(RtssStatus status)
+        private string BuildRenderStatusKey(RtssStatus status)
         {
             if (status == null)
                 return "<null>";
@@ -403,11 +475,17 @@ namespace RTSSGameBar.Widget
                 status.OsdPosition,
                 status.PluginVersion ?? string.Empty,
                 status.BundledPluginVersion ?? string.Empty,
-                status.Detail ?? string.Empty);
+                status.Detail ?? string.Empty,
+                status.Profile ?? string.Empty,
+                status.ActiveProfileHint ?? string.Empty,
+                status.ProfileMissing ?? string.Empty,
+                _selectedProfile ?? string.Empty,
+                status.AvailableProfiles == null ? string.Empty : string.Join(",", status.AvailableProfiles));
         }
 
         private void SetControlAvailability(bool controllable)
         {
+            ProfileComboBox.IsEnabled = controllable;
             FrameLimitSlider.IsEnabled = controllable;
             FrameLimitPresetComboBox.IsEnabled = controllable;
             LimiterTypeComboBox.IsEnabled = controllable;
@@ -436,6 +514,169 @@ namespace RTSSGameBar.Widget
             }
         }
 
+        private static string DisplayProfile(string profile)
+        {
+            return string.IsNullOrEmpty(profile) ? "Global" : profile;
+        }
+
+        private void SyncProfileComboBox(RtssStatus status)
+        {
+            var profiles = new List<string> { ProtocolConstants.GlobalProfile };
+            if (status.AvailableProfiles != null)
+            {
+                foreach (var profile in status.AvailableProfiles)
+                {
+                    if (string.IsNullOrWhiteSpace(profile))
+                        continue;
+                    if (string.Equals(profile, "Global", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (ProfileExists(profiles, profile))
+                        continue;
+                    profiles.Add(profile);
+                }
+            }
+
+            if (!ProfileExists(profiles, _selectedProfile))
+            {
+                _selectedProfile = ProtocolConstants.GlobalProfile;
+                _manualProfileSelection = false;
+            }
+
+            var listChanged = profiles.Count != _profileList.Count;
+            if (!listChanged)
+            {
+                for (var i = 0; i < profiles.Count; i++)
+                {
+                    if (!string.Equals(profiles[i], _profileList[i], StringComparison.Ordinal))
+                    {
+                        listChanged = true;
+                        break;
+                    }
+                }
+            }
+
+            _syncingControls = true;
+            try
+            {
+                if (listChanged)
+                {
+                    ProfileComboBox.Items.Clear();
+                    foreach (var profile in profiles)
+                    {
+                        ProfileComboBox.Items.Add(new ComboBoxItem
+                        {
+                            Content = DisplayProfile(profile),
+                            Tag = profile
+                        });
+                    }
+                    _profileList = profiles;
+                }
+
+                var index = ProfileIndexOf(_selectedProfile);
+                if (ProfileComboBox.SelectedIndex != index)
+                    ProfileComboBox.SelectedIndex = index;
+            }
+            finally
+            {
+                _syncingControls = false;
+            }
+        }
+
+        private int ProfileIndexOf(string profile)
+        {
+            for (var i = 0; i < ProfileComboBox.Items.Count; i++)
+            {
+                var item = ProfileComboBox.Items[i] as ComboBoxItem;
+                var value = item?.Tag as string ?? string.Empty;
+                if (string.Equals(value, profile, StringComparison.OrdinalIgnoreCase))
+                    return i;
+            }
+            return -1;
+        }
+
+        private void UpdateProfileHintText(RtssStatus status)
+        {
+            if (status.ActiveProfileHint != null)
+                _activeProfileHint = status.ActiveProfileHint;
+            if (status.ProfileMissing != null)
+                _profileMissing = status.ProfileMissing;
+
+            if (!string.IsNullOrEmpty(_profileMissing))
+            {
+                ProfileHintText.Text = "Profile \"" + _profileMissing + "\" was not found in RTSS. Showing Global values.";
+                return;
+            }
+
+            if (!status.Running || !status.PluginConnected)
+            {
+                ProfileHintText.Text = "The profile list is available once RTSS and the integration plugin are connected.";
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(_activeProfileHint))
+            {
+                ProfileHintText.Text = string.Equals(_selectedProfile, _activeProfileHint, StringComparison.OrdinalIgnoreCase)
+                    ? "Likely active game profile: " + _activeProfileHint + "."
+                    : "Likely active game profile: " + _activeProfileHint + ". Editing " + DisplayProfile(_selectedProfile) + ".";
+                return;
+            }
+
+            ProfileHintText.Text = "No game profile detected. Editing " + DisplayProfile(_selectedProfile) + ".";
+        }
+
+        private void CancelPendingProfileWrites()
+        {
+            ++_frameCommitGeneration;
+            _frameCommitPending = false;
+            ++_zoomCommitGeneration;
+            _zoomCommitPending = false;
+        }
+
+        private async void ProfileComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_syncingControls)
+                return;
+
+            var item = ProfileComboBox.SelectedItem as ComboBoxItem;
+            if (item == null)
+                return;
+
+            var profile = item.Tag as string ?? ProtocolConstants.GlobalProfile;
+            if (string.Equals(profile, _selectedProfile, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            _manualProfileSelection = true;
+            _manualHintSnapshot = _activeProfileHint ?? string.Empty;
+            CancelPendingProfileWrites();
+            _selectedProfile = profile;
+
+            if (_status != null)
+            {
+                // Do not leave values from the previous profile on screen while the new profile
+                // is being read back.
+                _status.FrameLimit = null;
+                _status.OsdZoom = null;
+                _status.OsdPosition = null;
+                _status.LimiterType = null;
+                ApplyStatus(_status);
+            }
+
+            for (var attempt = 0; attempt < 10
+                && (_frameWriterRunning || _zoomWriterRunning || _pendingCommands > 0); attempt++)
+            {
+                await Task.Delay(150);
+            }
+
+            // RefreshStatusAsync refuses while a debounced/in-flight write is still running.
+            // Retry a few times so the values of the newly selected profile are always loaded.
+            var refreshed = await RefreshStatusAsync();
+            for (var attempt = 0; !refreshed && attempt < 10 && IsSameProfile(profile, _selectedProfile); attempt++)
+            {
+                await Task.Delay(200);
+                refreshed = await RefreshStatusAsync();
+            }
+        }
+
         private void UpdateFocusGraph()
         {
             // Never redirect focus in code. We only update XYFocus neighbors when status changes.
@@ -452,6 +693,7 @@ namespace RTSSGameBar.Widget
 
             var ordered = new Control[]
             {
+                ProfileComboBox,
                 FrameLimitSlider,
                 FrameLimitPresetComboBox,
                 LimiterTypeComboBox,
@@ -807,10 +1049,12 @@ namespace RTSSGameBar.Widget
             _frameWriterRunning = true;
             try
             {
+                var profile = _selectedProfile;
                 // Latest-wins writer: at most one SetFrameLimit is in flight. If the user changes
                 // the value during a write, keep showing the desired value and send the newest
                 // value next (after its debounce has expired). Older responses never overwrite it.
-                while (!_frameCommitPending && _desiredFrameLimit != _committedFrameLimit)
+                // The profile guard stops the loop if the user switches profile mid-write.
+                while (!_frameCommitPending && IsSameProfile(profile, _selectedProfile) && _desiredFrameLimit != _committedFrameLimit)
                 {
                     var target = _desiredFrameLimit;
                     var success = await ExecuteCommandAsync(
@@ -833,6 +1077,9 @@ namespace RTSSGameBar.Widget
                         }
                         break;
                     }
+
+                    if (!IsSameProfile(profile, _selectedProfile))
+                        break;
 
                     _committedFrameLimit = target;
                     if (_status != null)
@@ -883,7 +1130,8 @@ namespace RTSSGameBar.Widget
             _zoomWriterRunning = true;
             try
             {
-                while (!_zoomCommitPending && _desiredOsdZoom != _committedOsdZoom)
+                var profile = _selectedProfile;
+                while (!_zoomCommitPending && IsSameProfile(profile, _selectedProfile) && _desiredOsdZoom != _committedOsdZoom)
                 {
                     var target = _desiredOsdZoom;
                     var success = await ExecuteCommandAsync(
@@ -906,6 +1154,9 @@ namespace RTSSGameBar.Widget
                         }
                         break;
                     }
+
+                    if (!IsSameProfile(profile, _selectedProfile))
+                        break;
 
                     _committedOsdZoom = target;
                     if (_status != null)
@@ -966,6 +1217,9 @@ namespace RTSSGameBar.Widget
             int timeoutMs = 3500,
             Action rollbackOverride = null)
         {
+            var profileAtSend = _selectedProfile;
+            request.Profile = profileAtSend;
+
             var previous = CloneStatus(_status);
             if (_status != null && optimisticMutation != null)
             {
@@ -984,20 +1238,34 @@ namespace RTSSGameBar.Widget
 
                 if (applyReturnedStatus && response.Status != null)
                 {
-                    _status = response.Status;
-                    CaptureCommittedValues(_status);
-                    ApplyStatus(_status);
+                    if (IsSameProfile(profileAtSend, _selectedProfile))
+                    {
+                        _status = response.Status;
+                        CaptureCommittedValues(_status);
+                        ApplyStatus(_status);
+                    }
+                    else
+                    {
+                        // The user switched profile while this write was in flight, so the
+                        // values belong to the profile that was written and must be dropped.
+                        // The profile list and the hint are not profile values, though, and
+                        // would otherwise stay stale until the next explicit refresh.
+                        MergeProfileIndependentStatus(response.Status);
+                    }
                 }
                 return true;
             }
             catch (Exception ex)
             {
-                if (rollbackOverride != null)
-                    rollbackOverride();
-                else if (previous != null)
+                if (IsSameProfile(profileAtSend, _selectedProfile))
                 {
-                    _status = previous;
-                    ApplyStatus(_status);
+                    if (rollbackOverride != null)
+                        rollbackOverride();
+                    else if (previous != null)
+                    {
+                        _status = previous;
+                        ApplyStatus(_status);
+                    }
                 }
                 SetError(ex.Message);
                 return false;
@@ -1008,6 +1276,31 @@ namespace RTSSGameBar.Widget
                 if (_pendingCommands == 0)
                     OperationText.Text = string.Empty;
             }
+        }
+
+        private static bool IsSameProfile(string left, string right)
+        {
+            return string.Equals(left ?? ProtocolConstants.GlobalProfile, right ?? ProtocolConstants.GlobalProfile,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Copies the status fields that describe the RTSS plugin and its profile list rather
+        /// than the values of one profile. Used when a write completed for a profile that is no
+        /// longer selected: those values are discarded, but the profile list and the hint belong
+        /// to the current view. ProfileMissing is deliberately not copied because it refers to
+        /// the profile that was written, which is no longer the selected one.
+        /// </summary>
+        private void MergeProfileIndependentStatus(RtssStatus written)
+        {
+            if (_status == null || written == null)
+                return;
+
+            _status.AvailableProfiles = written.AvailableProfiles;
+            _status.ActiveProfileHint = written.ActiveProfileHint;
+            _status.PluginVersion = written.PluginVersion;
+            _status.BundledPluginVersion = written.BundledPluginVersion;
+            ApplyStatus(_status);
         }
 
         private void ResetScrollToTop()
@@ -1379,7 +1672,13 @@ namespace RTSSGameBar.Widget
                 PluginUpdateAvailable = source.PluginUpdateAvailable,
                 IntegrationState = source.IntegrationState,
                 PluginVersion = source.PluginVersion,
-                BundledPluginVersion = source.BundledPluginVersion
+                BundledPluginVersion = source.BundledPluginVersion,
+                // The profile fields must survive a rollback. Without them ApplyStatus would
+                // rebuild the selector from a null list and silently fall back to Global.
+                Profile = source.Profile,
+                AvailableProfiles = source.AvailableProfiles == null ? null : (string[])source.AvailableProfiles.Clone(),
+                ActiveProfileHint = source.ActiveProfileHint,
+                ProfileMissing = source.ProfileMissing
             };
         }
 

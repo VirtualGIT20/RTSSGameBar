@@ -2,6 +2,35 @@
 
 All notable public changes to RTSS Game Bar are documented here.
 
+## 1.0.3 - 2026-10-24
+
+### Added
+
+- Profile awareness: the widget lists the RTSS application profiles and lets the user edit the one that most likely belongs to the running game, instead of only Global.
+- The likely game profile is preselected from an on-demand foreground hint that is matched against the RTSS profile list inside the plugin. There is no background watcher: the hint is resolved only during an explicit refresh or when the widget becomes visible.
+- A manual profile selection overrides the hint until the running game changes.
+
+### Documented
+
+- Recorded the limits of the profile hint in `README.md` and `docs/ARCHITECTURE.md`: matching is name-based, and applications whose window belongs to a helper process (for example the Steam client UI in `steamwebhelper.exe`) are not matched.
+
+### Changed
+
+- Widget/Helper IPC moved to protocol v20 on `RTSSGameBar.v20`.
+- RTSS plugin IPC moved to protocol v7 on `RTSSGameBar.RTSSPlugin.v7`; the bundled plugin is now v1.1.0 and must be updated from the widget after upgrading.
+- Writes to a non-empty profile name are validated against RTSS `EnumProfiles` first, because `LoadProfile` silently falls back to Global for unknown names.
+- The limiter-enabled and OSD-visible bits stay global RTSS runtime flags; they are not profile properties.
+
+### Fixed
+
+- Startup helper probes no longer record the expected cold-start named-pipe timeout as an IPC error in `widget-ipc.log`; only a launch that never succeeds is reported, through the launch result and one diagnostic line.
+- RTSS plugin errors now reach the UI as readable text instead of the raw pipe payload: a refused write to a missing profile shows which profile was not found, and the technical code stays in `helper.log` as a single line without a stack trace.
+- Switching profile while a write is still in flight no longer discards the profile list and the active profile hint; only the values of the profile that was written are dropped.
+- The active profile hint is cleared when RTSS stops or is restarted, so a hint from a previous RTSS session cannot survive into the next one.
+- Slow RTSS plugin reads now warn at 400 ms instead of 100 ms, because normal RTSS latency (100-200 ms) was filling `helper.log` with warnings against a 1500 ms read budget.
+- The widget no longer drops the profile list or the active hint when a failed write is rolled back.
+- A transient inability to resolve the game window no longer clears the hinted profile and moves the selection back to Global.
+
 ## 1.0.2 - 2026-09-10
 
 ### Fixed

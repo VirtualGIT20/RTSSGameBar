@@ -1,6 +1,6 @@
 # RTSS Game Bar
 
-RTSS Game Bar is an independent Xbox Game Bar widget for controlling common RivaTuner Statistics Server (RTSS) Global settings directly with a gamepad, mouse, or keyboard.
+RTSS Game Bar is an independent Xbox Game Bar widget for controlling common RivaTuner Statistics Server (RTSS) settings on the Global profile or on the profile of the running game, directly with a gamepad, mouse, or keyboard.
 
 The project is designed around controller-first navigation and a lightweight runtime: RTSS state is reconciled only while the widget is visible, and the helper/plugin spend their idle time waiting on named pipes rather than polling continuously.
 
@@ -8,7 +8,8 @@ The project is designed around controller-first navigation and a lightweight run
 
 ## Features
 
-- Global RTSS frame limiter with precise slider control.
+- Profile selector for Global or any RTSS application profile, with a best-effort hint for the profile that matches the running game.
+- Frame limiter for the selected profile with precise slider control.
 - Common frame-rate presets: Unlimited, 30, 40, 60, 90, 120, 144, 165, 240, and 360 FPS.
 - RTSS limiter type selection.
 - Limiter and OSD enable/disable controls.
@@ -18,6 +19,17 @@ The project is designed around controller-first navigation and a lightweight run
 - Install, update, and remove the small RTSS integration plugin from the widget.
 - Status-aware Xbox controller navigation.
 - Native Xbox Game Bar Back/B behavior.
+
+## How the running-game profile is recommended
+
+RTSS does not expose which profile is currently applied to the hooked application, so the widget only provides a best-effort hint. On every explicit Refresh (or when the widget becomes visible) the helper resolves the executable that owns the foreground or largest visible window, and the plugin matches that name against the profiles reported by RTSS. Nothing is polled in the background.
+
+Consequences worth knowing:
+
+- Profiles are matched by executable name. Renaming a profile in RTSS does not make it follow the executable.
+- Applications whose window belongs to a different process than the one RTSS hooks are not matched. Launchers are the common case: the Steam client window belongs to `steamwebhelper.exe`, so a profile for `steam.exe` is not preselected while the Steam client is in the foreground. Game profiles are unaffected.
+- When an executable is resolved but no profile matches, the widget stays on Global.
+- A manual profile selection overrides the hint until the running game changes.
 
 ## Requirements
 
@@ -34,7 +46,7 @@ For a self-signed release, import the supplied public certificate into `LocalMac
 
 ```powershell
 Import-Certificate -FilePath .\RTSSGameBar-Signing.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
-Add-AppxPackage .\RTSSGameBar.Widget_1.0.2.0_x64.msix
+Add-AppxPackage .\RTSSGameBar.Widget_1.0.3.0_x64.msix
 ```
 
 After installation, open Xbox Game Bar and launch **RTSS Game Bar** from the widget menu. If Integration reports `Install` or `Update`, run that action once so the bundled RTSS plugin matches the widget.
@@ -75,9 +87,9 @@ RTSS Game Bar has no telemetry, analytics, account system, or network service. R
 
 ## Development status
 
-`v1.0.0` is the first public baseline. The current release is `v1.0.2`, using package version `1.0.2.0` with public package identity `VirtualGIT20.RTSSGameBar` and publisher `CN=VirtualGIT20`.
+`v1.0.0` is the first public baseline. The current release is `v1.0.3`, using package version `1.0.3.0` with public package identity `VirtualGIT20.RTSSGameBar` and publisher `CN=VirtualGIT20`.
 
-The public Widget/Helper IPC is protocol v19. The RTSS plugin IPC remains protocol v6. The bundled RTSS integration plugin is v1.0.0.
+The public Widget/Helper IPC is protocol v20. The RTSS plugin IPC is protocol v7. The bundled RTSS integration plugin is v1.1.0.
 
 ## License
 

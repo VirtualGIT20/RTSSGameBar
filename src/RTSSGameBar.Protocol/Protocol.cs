@@ -8,11 +8,11 @@ namespace RTSSGameBar.Protocol
 {
     public static class ProtocolConstants
     {
-        public const int Version = 19;
-        public const string PipeName = "RTSSGameBar.v19";
-        public const string RtssPluginPipeName = "RTSSGameBar.RTSSPlugin.v6";
-        public const int RtssPluginProtocolVersion = 6;
-        public const string BundledPluginVersion = "1.0.0";
+        public const int Version = 20;
+        public const string PipeName = "RTSSGameBar.v20";
+        public const string RtssPluginPipeName = "RTSSGameBar.RTSSPlugin.v7";
+        public const int RtssPluginProtocolVersion = 7;
+        public const string BundledPluginVersion = "1.1.0";
         public const string GlobalProfile = "";
     }
 
@@ -126,6 +126,13 @@ namespace RTSSGameBar.Protocol
         [DataMember(Order = 13, EmitDefaultValue = false)] public string PluginVersion { get; set; }
         [DataMember(Order = 14, EmitDefaultValue = false)] public string BundledPluginVersion { get; set; }
         [DataMember(Order = 15, EmitDefaultValue = false)] public RtssOsdPosition? OsdPosition { get; set; }
+        [DataMember(Order = 16, EmitDefaultValue = false)] public string Profile { get; set; }
+        [DataMember(Order = 17, EmitDefaultValue = false)] public string[] AvailableProfiles { get; set; }
+        // Always emitted on plugin responses: an empty string means "the last resolved game
+        // executable has no matching RTSS profile"; null means this response did not carry
+        // hint information (for example RTSS is not running), so the widget keeps the last hint.
+        [DataMember(Order = 18)] public string ActiveProfileHint { get; set; }
+        [DataMember(Order = 19)] public string ProfileMissing { get; set; }
     }
 
     public static class ProtocolJson

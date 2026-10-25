@@ -22,7 +22,7 @@ namespace RTSSGameBar.Widget.Ipc
         private const string DiagnosticsPreviousLogFileName = "widget-ipc.previous.log";
         private const long DiagnosticsRotateAfterBytes = 1L * 1024L * 1024L;
 
-        public async Task<RtssResponse> SendAsync(RtssRequest request, int timeoutMs = 1500)
+        public async Task<RtssResponse> SendAsync(RtssRequest request, int timeoutMs = 1500, bool suppressDiagnostics = false)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
@@ -49,13 +49,16 @@ namespace RTSSGameBar.Widget.Ipc
                     if (completed != readTask)
                     {
                         responseTimeoutLogged = true;
-                        LogIpc(
-                            "TIMEOUT id=" + request.RequestId +
-                            " command=" + request.Command +
-                            " timeoutMs=" + timeoutMs +
-                            " responseWaitMs=" + responseClock.ElapsedMilliseconds +
-                            " totalMs=" + totalClock.ElapsedMilliseconds +
-                            " pipeConnected=" + IsPipeConnectedForDiagnostics() + ".");
+                        if (!suppressDiagnostics)
+                        {
+                            LogIpc(
+                                "TIMEOUT id=" + request.RequestId +
+                                " command=" + request.Command +
+                                " timeoutMs=" + timeoutMs +
+                                " responseWaitMs=" + responseClock.ElapsedMilliseconds +
+                                " totalMs=" + totalClock.ElapsedMilliseconds +
+                                " pipeConnected=" + IsPipeConnectedForDiagnostics() + ".");
+                        }
                         throw new TimeoutException("Timed out waiting for the helper IPC response.");
                     }
 
@@ -80,7 +83,7 @@ namespace RTSSGameBar.Widget.Ipc
                 }
                 catch (Exception ex)
                 {
-                    if (!responseTimeoutLogged)
+                    if (!responseTimeoutLogged && !suppressDiagnostics)
                     {
                         LogIpc(
                             "ERROR id=" + request.RequestId +
@@ -102,9 +105,9 @@ namespace RTSSGameBar.Widget.Ipc
             }
         }
 
-        public Task<RtssResponse> PingAsync(int timeoutMs = 500)
+        public Task<RtssResponse> PingAsync(int timeoutMs = 500, bool suppressDiagnostics = false)
         {
-            return SendAsync(new RtssRequest { Command = RtssCommand.Ping }, timeoutMs);
+            return SendAsync(new RtssRequest { Command = RtssCommand.Ping }, timeoutMs, suppressDiagnostics);
         }
 
         public void Disconnect()
@@ -192,6 +195,15 @@ namespace RTSSGameBar.Widget.Ipc
             {
                 // Diagnostics must never become another Widget failure path.
             }
+        }
+
+        /// <summary>
+        /// Writes one diagnostic line for events outside a single IPC request, such as a helper
+        /// launch that never reached the pipe. Used sparingly: expected probe failures stay silent.
+        /// </summary>
+        internal static void LogDiagnostics(string message)
+        {
+            LogIpc(OneLine(message));
         }
 
         private static string OneLine(string value)

@@ -8,7 +8,7 @@ namespace RTSSGameBar.Helper
 {
     internal static class Program
     {
-        private const string MutexName = @"Local\RTSSGameBar.Helper.v19.Singleton";
+        private const string MutexName = @"Local\RTSSGameBar.Helper.v20.Singleton";
 
         [STAThread]
         private static void Main(string[] args)

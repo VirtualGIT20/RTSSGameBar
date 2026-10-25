@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using RTSSGameBar.Helper.Integration;
 using RTSSGameBar.Helper.Platform;
 using RTSSGameBar.Helper.Rtss;
+using RTSSGameBar.Helper.RtssPlugin;
 using RTSSGameBar.Protocol;
 
 namespace RTSSGameBar.Helper.Ipc
@@ -229,8 +230,8 @@ namespace RTSSGameBar.Helper.Ipc
                 return RtssResponse.Fail(null, "bad_request", "Request is null.");
             if (request.ProtocolVersion != ProtocolConstants.Version)
                 return RtssResponse.Fail(request, "protocol_mismatch", "Unsupported helper protocol version.");
-            if (!string.IsNullOrEmpty(request.Profile))
-                return RtssResponse.Fail(request, "profile_not_supported", "RTSS Game Bar controls the RTSS Global profile only.");
+            if (!string.IsNullOrEmpty(request.Profile) && request.Profile.Length > 260)
+                return RtssResponse.Fail(request, "invalid_profile", "Profile name is too long.");
 
             try
             {
@@ -240,14 +241,14 @@ namespace RTSSGameBar.Helper.Ipc
                         return RtssResponse.Ok(request);
 
                     case RtssCommand.GetStatus:
-                        return WithStatus(request, _rtss.GetStatus());
+                        return WithStatus(request, _rtss.GetStatus(request.Profile));
 
                     case RtssCommand.StartRtss:
                     {
                         string error;
                         if (!_rtss.StartRtss(out error))
                             return RtssResponse.Fail(request, "start_failed", error ?? "RTSS failed to start.");
-                        return WithStatus(request, _rtss.GetStatus());
+                        return WithStatus(request, _rtss.GetStatus(request.Profile));
                     }
 
                     case RtssCommand.StopRtss:
@@ -255,18 +256,18 @@ namespace RTSSGameBar.Helper.Ipc
                         string error;
                         if (!_rtss.StopRtss(out error))
                             return RtssResponse.Fail(request, "stop_failed", error ?? "RTSS failed to close gracefully.");
-                        return WithStatus(request, _rtss.GetStatus());
+                        return WithStatus(request, _rtss.GetStatus(request.Profile));
                     }
 
                     case RtssCommand.SetFrameLimit:
                         if (!request.IntValue.HasValue)
                             return RtssResponse.Fail(request, "missing_value", "SetFrameLimit requires IntValue.");
-                        return WithStatus(request, _rtss.SetFrameLimit(request.IntValue.Value));
+                        return WithStatus(request, _rtss.SetFrameLimit(request.IntValue.Value, request.Profile));
 
                     case RtssCommand.SetLimiterType:
                         if (!request.IntValue.HasValue)
                             return RtssResponse.Fail(request, "missing_value", "SetLimiterType requires IntValue.");
-                        return WithStatus(request, _rtss.SetLimiterType((RtssLimiterType)request.IntValue.Value));
+                        return WithStatus(request, _rtss.SetLimiterType((RtssLimiterType)request.IntValue.Value, request.Profile));
 
                     case RtssCommand.SetLimiterEnabled:
                         if (!request.BoolValue.HasValue)
@@ -281,12 +282,12 @@ namespace RTSSGameBar.Helper.Ipc
                     case RtssCommand.SetOsdZoom:
                         if (!request.IntValue.HasValue)
                             return RtssResponse.Fail(request, "missing_value", "SetOsdZoom requires IntValue.");
-                        return WithStatus(request, _rtss.SetOsdZoom(request.IntValue.Value));
+                        return WithStatus(request, _rtss.SetOsdZoom(request.IntValue.Value, request.Profile));
 
                     case RtssCommand.SetOsdPosition:
                         if (!request.IntValue.HasValue)
                             return RtssResponse.Fail(request, "missing_value", "SetOsdPosition requires IntValue.");
-                        return WithStatus(request, _rtss.SetOsdPosition((RtssOsdPosition)request.IntValue.Value));
+                        return WithStatus(request, _rtss.SetOsdPosition((RtssOsdPosition)request.IntValue.Value, request.Profile));
 
                     case RtssCommand.InstallIntegration:
                         return IntegrationResult(request, _rtss.RunIntegrationOperation(IntegrationOperation.Install));
@@ -303,7 +304,21 @@ namespace RTSSGameBar.Helper.Ipc
             }
             catch (Exception ex)
             {
-                Log.Error("Command " + request.Command + " failed: " + ex);
+                var pluginError = ex as RtssPluginException;
+                if (pluginError != null && !string.IsNullOrEmpty(pluginError.Code))
+                {
+                    // Expected domain refusal (missing profile, rejected write, unavailable API).
+                    // One line is enough: a stack trace here would bury the real failures.
+                    if (string.Equals(pluginError.Code, "profile_not_found", StringComparison.Ordinal))
+                        Log.Warn("Command " + request.Command + " refused [" + pluginError.Code + "]: " + pluginError.Message);
+                    else
+                        Log.Error("Command " + request.Command + " failed [" + pluginError.Code + "]: " + pluginError.Message);
+                }
+                else
+                {
+                    Log.Error("Command " + request.Command + " failed: " + ex);
+                }
+
                 return RtssResponse.Fail(request, "rtss_plugin_error", ex.Message);
             }
         }
@@ -313,7 +328,7 @@ namespace RTSSGameBar.Helper.Ipc
             if (!result.Success)
                 return RtssResponse.Fail(request, "integration_setup_failed", result.Message);
 
-            return WithStatus(request, _rtss.GetStatus());
+            return WithStatus(request, _rtss.GetStatus(request.Profile));
         }
 
         private static RtssResponse WithStatus(RtssRequest request, RtssStatus status)

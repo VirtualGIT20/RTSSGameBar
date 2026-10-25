@@ -55,7 +55,7 @@
                         <Image Source="Assets/Square44x44Logo.png" Width="34" Height="34" VerticalAlignment="Center" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                             <TextBlock Text="RTSS Game Bar" FontSize="24" FontWeight="SemiBold" />
-                            <TextBlock Text="v1.0.2" Opacity="0.66" FontSize="13" />
+                            <TextBlock Text="v1.0.3" Opacity="0.66" FontSize="13" />
                         </StackPanel>
                     </Grid>
 
@@ -86,6 +86,29 @@
                                 <TextBlock x:Name="IntegrationStateText" Grid.Column="2" Text="Checking…" FontSize="16" FontWeight="SemiBold" />
                             </Grid>
                             <TextBlock x:Name="DetailText" Text="Starting local bridge…" TextWrapping="Wrap" Opacity="0.72" FontSize="13" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- RTSS profile scope -->
+                    <Border Padding="14" CornerRadius="10"
+                            Background="{StaticResource GameBarSurfaceBrush}"
+                            BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
+                            BorderThickness="1">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="Profile" FontSize="18" FontWeight="SemiBold" />
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="230"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="Editing" VerticalAlignment="Center" FontSize="16" />
+                                <ComboBox x:Name="ProfileComboBox"
+                                          Grid.Column="1"
+                                          Style="{StaticResource ControllerComboBoxStyle}"
+                                          SelectionChanged="ProfileComboBox_SelectionChanged"
+                                          AutomationProperties.Name="RTSS profile to edit" />
+                            </Grid>
+                            <TextBlock x:Name="ProfileHintText"
+                                       TextWrapping="Wrap"
+                                       Opacity="0.72"
+                                       FontSize="13" />
                         </StackPanel>
                     </Border>
 

@@ -19,6 +19,7 @@ required = [
     'src/RTSSGameBar.Helper/Program.cs',
     'src/RTSSGameBar.Helper/Ipc/PipeServer.cs',
     'src/RTSSGameBar.Helper/Rtss/RtssController.cs',
+    'src/RTSSGameBar.Helper/Rtss/ForegroundProcessResolver.cs',
     'src/RTSSGameBar.Helper/RtssPlugin/RtssPluginClient.cs',
     'src/RTSSGameBar.Helper/Integration/IntegrationManager.cs',
     'src/RTSSGameBar.Setup/RTSSGameBar.Setup.vcxproj',
@@ -64,7 +65,7 @@ manifest = (ROOT / 'src/RTSSGameBar.Widget/Package.appxmanifest').read_text(enco
 for needle in [
     'Name="VirtualGIT20.RTSSGameBar"',
     'Publisher="CN=VirtualGIT20"',
-    'Version="1.0.2.0"',
+    'Version="1.0.3.0"',
     '<PublisherDisplayName>VirtualGIT20</PublisherDisplayName>',
     'DisplayName="RTSS Game Bar"',
     'Name="microsoft.gameBarUIExtension"',
@@ -87,8 +88,8 @@ assembly_info = (ROOT / 'src/RTSSGameBar.Widget/Properties/AssemblyInfo.cs').rea
 for needle in [
     'AssemblyCompany("VirtualGIT20")',
     'AssemblyProduct("RTSS Game Bar")',
-    'AssemblyVersion("1.0.2.0")',
-    'AssemblyFileVersion("1.0.2.0")',
+    'AssemblyVersion("1.0.3.0")',
+    'AssemblyFileVersion("1.0.3.0")',
 ]:
     if needle not in assembly_info:
         errors.append('widget assembly metadata missing: ' + needle)
@@ -98,19 +99,20 @@ for rel in [
     'src/RTSSGameBar.Helper/RTSSGameBar.Helper.csproj',
 ]:
     text = (ROOT / rel).read_text(encoding='utf-8')
-    for needle in ['<Version>1.0.2</Version>', '<AssemblyVersion>1.0.2.0</AssemblyVersion>',
-                   '<FileVersion>1.0.2.0</FileVersion>', '<Company>VirtualGIT20</Company>',
+    for needle in ['<Version>1.0.3</Version>', '<AssemblyVersion>1.0.3.0</AssemblyVersion>',
+                   '<FileVersion>1.0.3.0</FileVersion>', '<Company>VirtualGIT20</Company>',
                    '<Product>RTSS Game Bar</Product>']:
         if needle not in text:
             errors.append(f'public assembly metadata missing in {rel}: {needle}')
 
 protocol = (ROOT / 'src/RTSSGameBar.Protocol/Protocol.cs').read_text(encoding='utf-8')
 for needle in [
-    'Version = 19', 'RTSSGameBar.v19', 'RTSSGameBar.RTSSPlugin.v6',
-    'RtssPluginProtocolVersion = 6', 'BundledPluginVersion = "1.0.0"',
+    'Version = 20', 'RTSSGameBar.v20', 'RTSSGameBar.RTSSPlugin.v7',
+    'RtssPluginProtocolVersion = 7', 'BundledPluginVersion = "1.1.0"',
     'MiddleLeft = 6', 'MiddleRight = 7', 'SetOsdZoom', 'SetOsdPosition',
     'RtssOsdPosition', 'StopRtss', 'InstallIntegration', 'UpdateIntegration',
-    'RemoveIntegration', 'RtssIntegrationState', 'PluginUpdateAvailable', 'OsdZoom'
+    'RemoveIntegration', 'RtssIntegrationState', 'PluginUpdateAvailable', 'OsdZoom',
+    'AvailableProfiles', 'ActiveProfileHint', 'ProfileMissing'
 ]:
     if needle not in protocol:
         errors.append('protocol missing: ' + needle)
@@ -125,14 +127,29 @@ for needle in [
     'SetFrameLimit', 'SetLimiterType', 'SetLimiterEnabled', 'SetOverlayVisible',
     'SetOsdZoom', 'SetOsdPosition', 'StopRtss', 'IntegrationManager', 'ShellExecuteEx',
     'GetForegroundWindow', 'lpVerb = "runas"', 'SeeMaskNoCloseProcess',
-    'IsUpdateAvailable', 'RtssPluginClient', 'RequestRtssWindowClose'
+    'IsUpdateAvailable', 'RtssPluginClient', 'RequestRtssWindowClose',
+    'ForegroundProcessResolver', 'TryGetLikelyGameExecutable', 'profile'
 ]:
     if needle not in helper_src:
         errors.append('helper/integration behavior missing: ' + needle)
 if 'Process.Start(new ProcessStartInfo' in (ROOT / 'src/RTSSGameBar.Helper/Integration/IntegrationManager.cs').read_text(encoding='utf-8'):
     errors.append('integration elevation regressed to Process.Start instead of owner-aware ShellExecuteEx')
-if 'Local\\RTSSGameBar.Helper.v19.Singleton' not in helper_src:
-    errors.append('public helper mutex does not match protocol v19')
+if 'Local\\RTSSGameBar.Helper.v20.Singleton' not in helper_src:
+    errors.append('public helper mutex does not match protocol v20')
+if 'ForegroundProcessResolver.TryGetLikelyGameExecutable' not in (ROOT / 'src/RTSSGameBar.Helper/Rtss/RtssController.cs').read_text(encoding='utf-8'):
+    errors.append('profile hint resolution is not wired into the on-demand status read')
+if 'profile_not_supported' in helper_src:
+    errors.append('helper still rejects non-Global profiles')
+controller_src = (ROOT / 'src/RTSSGameBar.Helper/Rtss/RtssController.cs').read_text(encoding='utf-8')
+if '_lastActiveProfileHint' not in controller_src:
+    errors.append('helper does not preserve the last resolved profile hint for write responses')
+if 'status.ActiveProfileHint = _lastActiveProfileHint' not in controller_src:
+    errors.append('profile hint is dropped from plugin write responses')
+widget_cs_source = (ROOT / 'src/RTSSGameBar.Widget/GamingWidget.xaml.cs').read_text(encoding='utf-8')
+if 'AvailableProfiles = source.AvailableProfiles' not in widget_cs_source:
+    errors.append('status rollback drops the RTSS profile list')
+if 'ActiveProfileHint = source.ActiveProfileHint' not in widget_cs_source:
+    errors.append('status rollback drops the active profile hint')
 if 'Helper.POC' in helper_src:
     errors.append('development POC helper mutex/name remains')
 pipe_server = (ROOT / 'src/RTSSGameBar.Helper/Ipc/PipeServer.cs').read_text(encoding='utf-8')
@@ -164,7 +181,7 @@ for needle in ['Debug|x64', 'Release|x64', 'MachineX64', '<PlatformToolset>v145<
     if needle not in setup_project:
         errors.append('native setup project config missing: ' + needle)
 setup_resource = (ROOT / 'src/RTSSGameBar.Setup/RTSSGameBar.Setup.rc').read_text(encoding='utf-8')
-for needle in ['FILEVERSION 1,0,2,0', 'PRODUCTVERSION 1,0,2,0', 'VirtualGIT20', 'RTSS Game Bar Integration Setup']:
+for needle in ['FILEVERSION 1,0,3,0', 'PRODUCTVERSION 1,0,3,0', 'VirtualGIT20', 'RTSS Game Bar Integration Setup']:
     if needle not in setup_resource:
         errors.append('native setup version resource missing: ' + needle)
 setup_manifest = (ROOT / 'src/RTSSGameBar.Setup/app.manifest').read_text(encoding='utf-8')
@@ -174,15 +191,17 @@ for needle in ['requireAdministrator', 'supportedOS', 'RTSSGameBar.Setup']:
 
 plugin = (ROOT / 'src/RTSSGameBar.RTSSPlugin/RTSSGameBarPlugin.cpp').read_text(encoding='utf-8')
 for needle in [
-    'kPluginVersion = "1.0.0"', 'RTSSGameBar.RTSSPlugin.v6', 'PONG|protocol=6',
-    'STATE|protocol=6', 'pluginVersion=%s', 'capabilities=%s', 'GET_STATE',
+    'kPluginVersion = "1.1.0"', 'RTSSGameBar.RTSSPlugin.v7', 'PONG|protocol=7',
+    'STATE|protocol=7', 'pluginVersion=%s', 'capabilities=%s', 'GET_STATE',
     'SET_FRAME_LIMIT|value=', 'SET_SYNC_LIMITER|value=', 'SET_LIMITER_ENABLED|value=',
     'SET_OSD_VISIBLE|value=', 'SET_OSD_ZOOM|value=', 'SET_OSD_POSITION|value=',
     'PositionX', 'PositionY', 'CoordinateSpace', 'SetOsdPositionVerified',
     'ResolveOsdPresetPosition', 'DetectOsdPositionPreset', 'CLOSE_RTSS',
     'GetProcAddress(hooks, "SetProfileProperty")', 'GetProcAddress(hooks, "SaveProfile")',
     'GetProcAddress(hooks, "UpdateProfiles")', 'GetProcAddress(hooks, "SetFlags")',
-    'SetIntPropertyVerified', 'SetFlagVerified', 'ZoomRatio', 'EnumWindows'
+    'SetIntPropertyVerified', 'SetFlagVerified', 'ZoomRatio', 'EnumWindows',
+    'GetProcAddress(hooks, "EnumProfiles")', 'EnumerateProfiles', 'FindProfileForHint',
+    'profile_not_found', 'UrlEncode', 'UrlDecode'
 ]:
     if needle not in plugin:
         errors.append('plugin backend missing: ' + needle)
@@ -196,7 +215,8 @@ for needle in [
     'Text="RTSS Game Bar"', 'FrameLimitSlider', 'FrameLimitPresetComboBox', 'LimiterTypeComboBox',
     'LimiterEnabledToggle', 'OverlayToggle', 'OsdZoomSlider', 'OsdPositionComboBox',
     'RtssActionButton', 'IntegrationActionButton', 'RefreshButton',
-    '<Slider ', '<ComboBox ', '<ToggleSwitch ', 'Symbol="Sync"', 'Text="v1.0.2"'
+    'ProfileComboBox', 'ProfileHintText',
+    '<Slider ', '<ComboBox ', '<ToggleSwitch ', 'Symbol="Sync"', 'Text="v1.0.3"'
 ]:
     if needle not in widget_xaml:
         errors.append('controller UI missing: ' + needle)
@@ -216,7 +236,9 @@ for needle in [
     '_frameCommitGeneration', '_zoomCommitGeneration', 'InstallIntegration', 'UpdateIntegration',
     'RemoveIntegration', 'StopRtss', 'VisibleChanged += Widget_VisibleChanged',
     'RefreshStatusAsync(false)', 'VisibleRefreshInterval', 'BuildRenderStatusKey',
-    'IsCurrentlyVisible', 'coreWindow.Visible', 'ConfigureRefreshTimerForCurrentVisibility'
+    'IsCurrentlyVisible', 'coreWindow.Visible', 'ConfigureRefreshTimerForCurrentVisibility',
+    'ProfileComboBox_SelectionChanged', 'SyncProfileComboBox', '_selectedProfile',
+    'ActiveProfileHint', 'SendStatusRequestAsync', 'ResolveDesiredProfile', 'IsSameProfile'
 ]:
     if needle not in widget_cs:
         errors.append('widget behavior missing: ' + needle)
@@ -257,7 +279,7 @@ for needle in [
         errors.append('status-aware focus graph missing: ' + needle)
 focus_region = widget_cs[widget_cs.find('private void UpdateFocusGraph()'):]
 for control_name in [
-    'FrameLimitSlider', 'FrameLimitPresetComboBox', 'LimiterTypeComboBox',
+    'ProfileComboBox', 'FrameLimitSlider', 'FrameLimitPresetComboBox', 'LimiterTypeComboBox',
     'LimiterEnabledToggle', 'OverlayToggle', 'OsdZoomSlider', 'OsdPositionComboBox',
     'RtssActionButton', 'IntegrationActionButton', 'RefreshButton'
 ]:
@@ -298,7 +320,7 @@ for stale in ['GetActiveMonitorWidth', 'kOsdEdgeMargin']:
 plugin_client = (ROOT / 'src/RTSSGameBar.Helper/RtssPlugin/RtssPluginClient.cs').read_text(encoding='utf-8')
 if 'if (value < 0 || value > 7)' not in plugin_client:
     errors.append('helper plugin client rejects middle OSD positions')
-if 'ParseIntValue(request, "SET_OSD_POSITION|value=", 0, 7, value)' not in plugin:
+if 'ReadRequestedValue(request, params, "SET_OSD_POSITION|value=", 0, 7, value)' not in plugin:
     errors.append('RTSS plugin parser rejects middle OSD positions')
 
 for label, tag in [
@@ -325,8 +347,8 @@ if 'IntegrationActionButton.XYFocusUp = IntegrationActionButton' in widget_cs:
 for needle in ['if (!IsCurrentlyVisible())', '_refreshTimer.Stop();', 'coreWindow.Visible', 'TimeSpan.FromSeconds(5)']:
     if needle not in widget_cs:
         errors.append('visibility-aware polling requirement missing: ' + needle)
-if 'pluginReadClock.ElapsedMilliseconds >= 100' not in helper_src:
-    errors.append('slow RTSS read warning threshold is not 100 ms')
+if 'pluginReadClock.ElapsedMilliseconds >= 400' not in helper_src:
+    errors.append('slow RTSS read warning threshold is not 400 ms')
 if 'processes = Process.GetProcessesByName("RTSS");' not in helper_src or 'process.Dispose();' not in helper_src:
     errors.append('helper RTSS process enumeration does not dispose Process objects')
 log_src = (ROOT / 'src/RTSSGameBar.Helper/Platform/Log.cs').read_text(encoding='utf-8')
@@ -416,4 +438,4 @@ if errors:
 
 print('Static checks passed.')
 print(f'Checked {len(xml_files)} XML project/manifest/XAML files.')
-print('RTSS Game Bar v1.0.2: public identity VirtualGIT20.RTSSGameBar; Widget/Helper protocol v19; RTSS plugin v1.0.0 on protocol v6.')
+print('RTSS Game Bar v1.0.3: public identity VirtualGIT20.RTSSGameBar; Widget/Helper protocol v20; RTSS plugin v1.1.0 on protocol v7.')

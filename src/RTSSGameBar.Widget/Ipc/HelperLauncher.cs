@@ -88,6 +88,12 @@ namespace RTSSGameBar.Widget.Ipc
                 ? "The full-trust activation returned, but the helper did not answer the named pipe within 8 seconds."
                 : "The helper did not answer the named pipe within 8 seconds. Last IPC error: " + FormatException(lastPingError);
 
+            // Individual probe failures are expected and stay silent, but a launch that never
+            // succeeds must leave one diagnostic line behind for later investigation.
+            PipeClient.LogDiagnostics(
+                "cold start failed after 20 attempts: " +
+                (lastPingError == null ? "no IPC error was captured." : FormatException(lastPingError)));
+
             return HelperLaunchResult.Fail("IPC", message);
         }
 
@@ -95,7 +101,10 @@ namespace RTSSGameBar.Widget.Ipc
         {
             try
             {
-                var response = await _client.PingAsync(timeoutMs);
+                // Launch probes run before the helper exists, so a failed attempt is the
+                // expected outcome rather than a diagnostic event. Only a launch that never
+                // succeeds is reported, through HelperLaunchResult.Fail.
+                var response = await _client.PingAsync(timeoutMs, suppressDiagnostics: true);
                 if (response?.Success == true)
                     return new PingResult { Success = true };
 
