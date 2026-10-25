@@ -613,15 +613,27 @@ namespace RTSSGameBar.Widget
                 return;
             }
 
-            if (!string.IsNullOrEmpty(_activeProfileHint))
+            var hint = _activeProfileHint ?? string.Empty;
+
+            // Always state the scope and why it was chosen: "Auto" means the widget derived
+            // it from the running game, "Manual" means the user overrode that choice.
+            if (_manualProfileSelection)
             {
-                ProfileHintText.Text = string.Equals(_selectedProfile, _activeProfileHint, StringComparison.OrdinalIgnoreCase)
-                    ? "Likely active game profile: " + _activeProfileHint + "."
-                    : "Likely active game profile: " + _activeProfileHint + ". Editing " + DisplayProfile(_selectedProfile) + ".";
+                ProfileHintText.Text = string.IsNullOrEmpty(hint)
+                    ? "Manual · editing " + DisplayProfile(_selectedProfile) + ". No game detected."
+                    : "Manual · editing " + DisplayProfile(_selectedProfile) + ". Detected: " + hint + ".";
                 return;
             }
 
-            ProfileHintText.Text = "No game profile detected. Editing " + DisplayProfile(_selectedProfile) + ".";
+            if (string.IsNullOrEmpty(hint))
+            {
+                ProfileHintText.Text = "Auto · no game detected. Editing " + DisplayProfile(_selectedProfile) + ".";
+                return;
+            }
+
+            ProfileHintText.Text = string.Equals(_selectedProfile, hint, StringComparison.OrdinalIgnoreCase)
+                ? "Auto · detected game profile: " + hint + "."
+                : "Auto · detected game profile: " + hint + ". Editing " + DisplayProfile(_selectedProfile) + ".";
         }
 
         private void CancelPendingProfileWrites()

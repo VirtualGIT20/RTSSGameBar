@@ -20,6 +20,7 @@ All notable public changes to RTSS Game Bar are documented here.
 - RTSS plugin IPC moved to protocol v7 on `RTSSGameBar.RTSSPlugin.v7`; the bundled plugin is now v1.1.0 and must be updated from the widget after upgrading.
 - Writes to a non-empty profile name are validated against RTSS `EnumProfiles` first, because `LoadProfile` silently falls back to Global for unknown names.
 - The limiter-enabled and OSD-visible bits stay global RTSS runtime flags; they are not profile properties.
+- The profile hint now states whether the scope is automatic or a manual override (`Auto · detected game profile: …` / `Manual · editing … · Detected: …`), so it is always clear which profile the controls write to and why.
 
 ### Fixed
 

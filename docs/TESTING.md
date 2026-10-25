@@ -6,7 +6,7 @@
 2. Build/sign/install package `1.0.3.0` with a certificate whose Subject is `CN=VirtualGIT20`.
 3. Open Xbox Game Bar and confirm the widget appears as `RTSS Game Bar`.
 4. If the previously installed RTSS plugin is an older development build, confirm Integration shows `Update`, perform the update, and confirm the plugin reports v1.1.0 afterward.
-5. Verify controller navigation through Frame limiter, Preset, Limiter type, Limiter, Overlay, OSD size, OSD position, RTSS, Integration, and Refresh.
+5. Verify controller navigation through Profile, Frame limiter, Preset, Limiter type, Limiter, Overlay, OSD size, OSD position, RTSS, Integration, and Refresh. Confirm the Profile selector is reachable with Up from Frame limiter and that selecting another profile loads that profile's values.
 6. In Install/Update-required state, confirm repeated Down stays on Integration while Up can exit the widget.
 7. Verify native B/Back closes/exits according to Xbox Game Bar behavior.
 8. Test all frame-limit presets and arbitrary slider values.
